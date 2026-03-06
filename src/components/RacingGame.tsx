@@ -21,7 +21,7 @@ const RUMBLE_LENGTH = 3;
 const FIELD_OF_VIEW = 100;
 const CAMERA_HEIGHT = 1000;
 const CAMERA_DEPTH = 1 / Math.tan((FIELD_OF_VIEW / 2) * Math.PI / 180);
-const DRAW_DISTANCE = 300;
+const DRAW_DISTANCE = 400;
 
 interface Segment {
   index: number;
@@ -32,6 +32,7 @@ interface Segment {
   color: { road: string; grass: string; rumble: string; lane?: string };
   checkpoint?: boolean;
   passed?: boolean;
+  clip?: number;
 }
 
 interface Sprite {
@@ -332,6 +333,13 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       const worldX = p.world.x - cameraX;
       const worldY = p.world.y - cameraY;
       const worldZ = p.world.z - cameraZ;
+      
+      if (worldZ <= 0) {
+        p.screen.y = SCREEN_HEIGHT * 2;
+        p.screen.w = 0;
+        return;
+      }
+
       const scale = CAMERA_DEPTH / worldZ;
       p.screen.x = Math.round((SCREEN_WIDTH / 2) + (scale * worldX * SCREEN_WIDTH / 2));
       p.screen.y = Math.round((SCREEN_HEIGHT / 2) - (scale * worldY * SCREEN_HEIGHT / 2));
@@ -680,6 +688,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
 
+      // Draw Ground (to cover gaps between road and horizon)
+      ctx.fillStyle = weather === 'rain' ? '#1a2e21' : '#065f46';
+      ctx.fillRect(0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
+
       // Sun / Horizon Glow
       if (weather === 'clear') {
         const sunGrad = ctx.createRadialGradient(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 200);
@@ -742,6 +754,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
 
       let x = 0;
       let dx = -(baseSegment.curve * basePercent);
+      let maxy = SCREEN_HEIGHT;
 
       // Render Road
       for (let n = 0; n < DRAW_DISTANCE; n++) {
@@ -752,8 +765,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
 
         x += dx;
         dx += segment.curve;
+        segment.clip = maxy;
 
-        if (segment.p1.screen.y <= segment.p2.screen.y || segment.p2.screen.y >= SCREEN_HEIGHT) continue;
+        if (segment.p1.screen.y <= segment.p2.screen.y || segment.p2.screen.y >= maxy) continue;
 
         // Draw Grass (with gradient)
         const grassGrad = ctx.createLinearGradient(0, segment.p2.screen.y, 0, segment.p1.screen.y);
@@ -824,12 +838,17 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
           const l2 = segment.p2.screen.w / 40;
           drawPolygon(ctx, segment.p1.screen.x, segment.p1.screen.y, l1, segment.p2.screen.x, segment.p2.screen.y, l2, segment.color.lane);
         }
+
+        maxy = segment.p2.screen.y;
       }
 
       // Render Sprites (Trees and Opponents)
       for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
         const segment = segments[(baseSegment.index + n) % segments.length];
         
+        // Skip if segment is hidden behind a hill
+        if (segment.p1.screen.y >= (segment.clip || SCREEN_HEIGHT)) continue;
+
         // Checkpoints
         if (segment.checkpoint) {
           const archX = segment.p1.screen.x;
