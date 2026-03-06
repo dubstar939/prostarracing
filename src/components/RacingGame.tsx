@@ -30,6 +30,8 @@ interface Segment {
   curve: number;
   sprites: Sprite[];
   color: { road: string; grass: string; rumble: string; lane?: string };
+  checkpoint?: boolean;
+  passed?: boolean;
 }
 
 interface Sprite {
@@ -62,6 +64,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     lap: 1,
     totalLaps: 2,
     time: 0,
+    checkpointTime: 40,
     turbo: 100,
     damage: 0,
     slipstream: false,
@@ -74,6 +77,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const cityscapeRef = useRef<any[]>([]);
   const [isMobile, setIsMobile] = useState(false);
+  const [checkpointNotify, setCheckpointNotify] = useState(false);
 
   const SCREEN_WIDTH = aspectRatio === '4:3' ? 800 : 1066;
   const SCREEN_HEIGHT = 600;
@@ -299,6 +303,12 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       // Ending straight
       addStraight(100);
 
+      // Add Checkpoints
+      const checkpointInterval = Math.floor(segments.length / 4);
+      for (let n = checkpointInterval; n < segments.length; n += checkpointInterval) {
+        segments[n].checkpoint = true;
+      }
+
       // Add scenery (trees/props)
       for (let n = 0; n < segments.length; n += 6) {
         if (random() > 0.4) {
@@ -343,6 +353,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     const TURBO_MAX_SPEED = 18000 + (carConfig.engine - 1) * 1000;
     const TURBO_CHARGE_RATE = 25 + (carConfig.turbo - 1) * 10; // Percent per second
     const TURBO_BOOST_DURATION = 3 + (carConfig.turbo - 1) * 0.5; // Seconds
+    let checkpointTime = 40;
 
     // Weather State
     let rainParticles: { x: number; y: number; speed: number; length: number }[] = [];
@@ -373,6 +384,15 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         return;
       }
 
+      // Checkpoint Timer Update
+      checkpointTime -= dt;
+      if (checkpointTime <= 0) {
+        checkpointTime = 0;
+        // Penalties for running out of time
+        speed = Math.max(0, speed - 5000 * dt);
+        damage = Math.min(100, damage + 5 * dt);
+      }
+
       // Weather Updates
       if (weather === 'rain') {
         rainParticles.forEach(p => {
@@ -387,6 +407,15 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
 
       const playerSegment = findSegment(position + playerZ);
       const speedPercent = speed / maxSpeed;
+
+      // Checkpoint Passing Detection
+      if (playerSegment.checkpoint && !playerSegment.passed) {
+        playerSegment.passed = true;
+        checkpointTime = Math.min(99, checkpointTime + 30);
+        audioManager.playTurbo(); // Reuse sound for feedback
+        setCheckpointNotify(true);
+        setTimeout(() => setCheckpointNotify(false), 2000);
+      }
 
       // Smoke Updates
       for (let i = smokeParticles.length - 1; i >= 0; i--) {
@@ -628,7 +657,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         leaderboard: allRacers.slice(0, 5),
         turbo: turboMeter,
         damage: damage,
-        slipstream: isSlipstreaming
+        slipstream: isSlipstreaming,
+        checkpointTime: checkpointTime
       }));
     };
 
@@ -800,6 +830,15 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
         const segment = segments[(baseSegment.index + n) % segments.length];
         
+        // Checkpoints
+        if (segment.checkpoint) {
+          const archX = segment.p1.screen.x;
+          const archY = segment.p1.screen.y;
+          const archW = segment.p1.screen.w;
+          const archH = archW * 0.6;
+          drawCheckpoint(ctx, archX, archY, archW, archH, segment.passed || false);
+        }
+
         // Trees
         segment.sprites.forEach(sprite => {
           const spriteX = segment.p1.screen.x + (segment.p1.screen.w * sprite.offset);
@@ -964,6 +1003,37 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
 
   const toggleAspectRatio = () => {
     setAspectRatio(prev => prev === '4:3' ? '16:9' : '4:3');
+  };
+
+  const drawCheckpoint = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, passed: boolean) => {
+    const archW = w * 2.5;
+    const archH = h * 3;
+    
+    // Pillars
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(x - archW/2, y - archH, archW/12, archH);
+    ctx.fillRect(x + archW/2 - archW/12, y - archH, archW/12, archH);
+    
+    // Banner
+    ctx.fillStyle = passed ? '#059669' : '#d97706';
+    ctx.fillRect(x - archW/2, y - archH, archW, archH/3);
+    
+    // Text
+    ctx.fillStyle = 'white';
+    ctx.font = `bold ${Math.max(10, archH/6)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('CHECKPOINT', x, y - archH + archH/6);
+
+    // Glow
+    if (!passed) {
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = '#fbbf24';
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(x - archW/2, y - archH, archW, archH/3);
+      ctx.shadowBlur = 0;
+    }
   };
 
   const drawPolygon = (ctx: CanvasRenderingContext2D, x1: number, y1: number, w1: number, x2: number, y2: number, w2: number, color: string, withTexture: boolean = false) => {
@@ -1370,6 +1440,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
               </div>
               <div className="text-2xl font-black mt-2">Time: {hud.time.toFixed(2)}</div>
               
+              <div className={`text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] ${hud.checkpointTime < 10 ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
+                TIME: {Math.ceil(hud.checkpointTime)}s
+              </div>
+              
               {isMultiplayer && roomId && (
                 <div className="mt-2 flex items-center gap-2">
                   <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
@@ -1547,6 +1621,24 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
                   Resume
                 </button>
               </motion.div>
+            </div>
+          )}
+          {checkpointNotify && (
+            <motion.div
+              initial={{ opacity: 0, y: 50, scale: 0.5 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            >
+              <div className="bg-yellow-400 text-black px-8 py-4 rounded-sm font-black italic text-4xl shadow-[0_0_30px_#facc15] transform skew-x-[-10deg]">
+                TIME EXTENDED! +30s
+              </div>
+            </motion.div>
+          )}
+          {hud.checkpointTime <= 0 && (
+            <div className="absolute inset-0 bg-red-900/40 flex items-center justify-center pointer-events-none">
+              <div className="text-white font-black italic text-6xl animate-pulse drop-shadow-2xl">
+                TIME OVER!
+              </div>
             </div>
           )}
         </div>
