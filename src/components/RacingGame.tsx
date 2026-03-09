@@ -1498,50 +1498,59 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
                   ></div>
                 </div>
               </div>
-
-              <div className="flex items-center gap-4">
-                <span className={`text-2xl font-black uppercase italic tracking-tighter transition-colors ${hud.turbo >= 100 ? 'text-yellow-400 animate-pulse' : 'text-white'}`}>
-                  {hud.turbo >= 100 ? 'Turbo Ready' : 'Turbo'}
-                </span>
-                <div className="w-56 h-6 bg-black/50 border-2 border-white/80 p-0.5 relative">
-                  <div 
-                    className={`h-full transition-all duration-100 ${hud.turbo >= 100 ? 'bg-yellow-400 shadow-[0_0_15px_#facc15]' : 'bg-white shadow-[0_0_10px_white]'}`} 
-                    style={{ width: `${hud.turbo}%` }}
-                  ></div>
-                  {/* Charge Indicator */}
-                  {hud.turbo < 100 && (
-                    <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold uppercase tracking-tighter opacity-50">
-                      Hold Shift to Charge
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
           </div>
 
-          <div className="absolute bottom-12 right-12 text-right drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">
-            {hud.slipstream && (
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: [0.4, 1, 0.4], scale: 1 }}
-                transition={{ repeat: Infinity, duration: 1 }}
-                className="text-blue-400 font-black italic text-2xl mb-2 tracking-tighter flex items-center justify-end gap-2"
-              >
-                <Zap className="w-6 h-6 fill-blue-400" />
-                SLIPSTREAMING
-              </motion.div>
-            )}
-            <div className="text-8xl font-black italic tracking-tighter">
-              {hud.speed}
-              <span className="text-2xl ml-3 not-italic font-bold opacity-90">MPH</span>
-            </div>
-            {hud.leaderboard && hud.leaderboard.length > 0 && (
-              <div className="text-6xl font-black italic tracking-tighter mt-2 text-emerald-400">
-                <span className="text-2xl not-italic font-bold opacity-90 mr-2">POS</span>
-                {hud.leaderboard.findIndex((r: any) => r.isPlayer) + 1}
-                <span className="text-2xl not-italic font-bold opacity-90 ml-1">/ {hud.leaderboard.length}</span>
+          {/* Bottom HUD - Dashboard Style */}
+          <div className="absolute bottom-12 left-12 right-12 flex justify-between items-end pointer-events-none">
+            {/* Bottom Left: Turbo Meter */}
+            <div className="flex flex-col items-start drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">
+              <div className="flex items-center gap-3 mb-1">
+                <Zap className={`w-5 h-5 ${hud.turbo >= 100 ? 'text-yellow-400 fill-yellow-400 animate-pulse' : 'text-zinc-400'}`} />
+                <span className={`text-xl font-black uppercase italic tracking-tighter transition-colors ${hud.turbo >= 100 ? 'text-yellow-400 animate-pulse' : 'text-white'}`}>
+                  {hud.turbo >= 100 ? 'Turbo Ready' : 'Turbo'}
+                </span>
               </div>
-            )}
+              <div className="w-64 h-4 bg-black/60 border-2 border-white/60 p-0.5 relative overflow-hidden">
+                <motion.div 
+                  initial={false}
+                  animate={{ width: `${hud.turbo}%` }}
+                  className={`h-full transition-all duration-100 ${hud.turbo >= 100 ? 'bg-yellow-400 shadow-[0_0_15px_#facc15]' : 'bg-white shadow-[0_0_10px_white]'}`} 
+                />
+                {hud.turbo < 100 && (
+                  <div className="absolute inset-0 flex items-center justify-center text-[8px] font-bold uppercase tracking-widest opacity-40">
+                    Hold Shift to Charge
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom Right: Speed & Position */}
+            <div className="text-right drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">
+              {hud.slipstream && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: [0.4, 1, 0.4], scale: 1 }}
+                  transition={{ repeat: Infinity, duration: 1 }}
+                  className="text-blue-400 font-black italic text-xl mb-1 tracking-tighter flex items-center justify-end gap-2"
+                >
+                  <Zap className="w-5 h-5 fill-blue-400" />
+                  SLIPSTREAM
+                </motion.div>
+              )}
+              <div className="flex items-end justify-end gap-4">
+                <div className="text-8xl font-black italic tracking-tighter leading-none">
+                  {hud.speed}
+                  <span className="text-2xl ml-2 not-italic font-bold opacity-70">MPH</span>
+                </div>
+                {hud.leaderboard && hud.leaderboard.length > 0 && (
+                  <div className="text-6xl font-black italic tracking-tighter text-emerald-400 mb-1">
+                    <span className="text-2xl not-italic font-bold opacity-70 mr-1">P</span>
+                    {hud.leaderboard.findIndex((r: any) => r.isPlayer) + 1}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Mobile Controls */}

@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RacingGame, TrackThemeType } from './components/RacingGame';
 import { Garage } from './components/Garage';
+import { CarSelect } from './components/CarSelect';
 import { Trophy, Flag, Settings, Play, Info, Users, Globe, Loader2, Map, ShoppingBag, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { socketService } from './services/socketService';
@@ -56,7 +57,7 @@ function useCoverImage() {
 }
 
 export default function App() {
-  const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'garage' | 'options' | 'mode-select'>('title');
+  const [gameState, setGameState] = useState<'title' | 'car-select' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'garage' | 'options' | 'mode-select'>('title');
   const [level, setLevel] = useState(() => {
     const saved = localStorage.getItem('racing_level');
     return saved ? parseInt(saved, 10) : 1;
@@ -152,7 +153,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setGameState('menu')}
+            onClick={() => setGameState('car-select')}
             className="fixed inset-0 z-50 cursor-pointer bg-black flex flex-col items-center justify-center overflow-hidden"
           >
             {/* Title Image */}
@@ -196,6 +197,24 @@ export default function App() {
             <div className="absolute bottom-0 w-full h-1/3 bg-gradient-to-t from-purple-900/40 to-transparent">
               <div className="absolute inset-0 bg-[linear-gradient(to_right,#06b6d422_1px,transparent_1px),linear-gradient(to_bottom,#06b6d422_1px,transparent_1px)] bg-[size:60px_60px] [transform:perspective(500px)_rotateX(60deg)] origin-bottom"></div>
             </div>
+          </motion.div>
+        )}
+
+        {gameState === 'car-select' && (
+          <motion.div
+            key="car-select"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="w-full"
+          >
+            <CarSelect 
+              currentModel={carConfig.model}
+              onSelect={(model) => {
+                setCarConfig(prev => ({ ...prev, model }));
+                setGameState('menu');
+              }}
+            />
           </motion.div>
         )}
 
