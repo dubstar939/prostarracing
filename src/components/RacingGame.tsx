@@ -4,6 +4,9 @@ import { audioManager } from '../services/audioService';
 import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Zap, Monitor } from 'lucide-react';
 
 import { socketService } from '../services/socketService';
+import { CarConfig, CAR_MODELS, CarModelType } from '../types';
+
+export type TrackThemeType = 'city' | 'desert' | 'mountain';
 
 interface RacingGameProps {
   level: number;
@@ -11,6 +14,8 @@ interface RacingGameProps {
   onBack: () => void;
   isMultiplayer?: boolean;
   roomId?: string;
+  trackTheme?: TrackThemeType;
+  carConfig: CarConfig;
 }
 
 // Pseudo-3D Road Constants
@@ -41,22 +46,50 @@ interface Sprite {
   scale: number;
 }
 
-export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack, isMultiplayer, roomId }) => {
+const THEMES = {
+  city: {
+    colors: {
+      light: { road: '#1a1a1a', grass: '#0a0a0c', rumble: '#00ffff', lane: '#fff' },
+      dark: { road: '#151515', grass: '#050507', rumble: '#ff00ff' }
+    },
+    grip: 1.0,
+    bumps: 0.5,
+    sky: '#020205',
+    scenery: ['building', 'lamp', 'billboard']
+  },
+  desert: {
+    colors: {
+      light: { road: '#444', grass: '#d2b48c', rumble: '#fff', lane: '#fff' },
+      dark: { road: '#3d3d3d', grass: '#c2a47c', rumble: '#b22222' }
+    },
+    grip: 1.1,
+    bumps: 0.2,
+    sky: '#f97316',
+    scenery: ['cactus', 'rock', 'bush']
+  },
+  mountain: {
+    colors: {
+      light: { road: '#333', grass: '#1a4a1a', rumble: '#fff', lane: '#fff' },
+      dark: { road: '#2d2d2d', grass: '#153a15', rumble: '#000' }
+    },
+    grip: 0.85,
+    bumps: 1.8,
+    sky: '#38bdf8',
+    scenery: ['pine', 'rock', 'snow-rock']
+  }
+};
+
+export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack, isMultiplayer, roomId, trackTheme = 'city', carConfig }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [isLocalReady, setIsLocalReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [otherPlayers, setOtherPlayers] = useState<{ [key: string]: any }>({});
   const otherPlayersRef = useRef<{ [key: string]: any }>({});
-  const [weather, setWeather] = useState<'clear' | 'rain' | 'fog'>('clear');
-  const [carConfig, setCarConfig] = useState({
-    color: '#4ade80',
-    spoiler: 'large' as 'none' | 'small' | 'large',
-    rims: '#ffffff',
-    decal: 'none' as 'none' | 'stripes' | 'racing-number',
-    engine: 1,
-    tires: 1,
-    turbo: 1
+  const [weather, setWeather] = useState<'clear' | 'rain' | 'fog'>(() => {
+    if (trackTheme === 'mountain') return Math.random() > 0.5 ? 'fog' : 'rain';
+    if (trackTheme === 'city') return Math.random() > 0.7 ? 'rain' : 'clear';
+    return 'clear';
   });
 
   const [hud, setHud] = useState({
@@ -149,7 +182,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       ctx.ellipse(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 100, 300, 100, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      drawPlayerCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 150, 300, 180, carConfig, false, 0, 0);
+      drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 150, 300, 180, carConfig, false, 0, 0, "YOU");
       return;
     }
 
@@ -157,6 +190,32 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    // Polyfill roundRect for older browsers
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+      CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+        let radii: { tl: number; tr: number; br: number; bl: number };
+        if (typeof r === 'number') {
+          radii = { tl: r, tr: r, br: r, bl: r };
+        } else if (Array.isArray(r)) {
+          radii = { tl: r[0] || 0, tr: r[1] || 0, br: r[2] || 0, bl: r[3] || 0 };
+        } else {
+          radii = { tl: 0, tr: 0, br: 0, bl: 0, ...r };
+        }
+        this.beginPath();
+        this.moveTo(x + radii.tl, y);
+        this.lineTo(x + w - radii.tr, y);
+        this.quadraticCurveTo(x + w, y, x + w, y + radii.tr);
+        this.lineTo(x + w, y + h - radii.br);
+        this.quadraticCurveTo(x + w, y + h, x + w - radii.br, y + h);
+        this.lineTo(x + radii.bl, y + h);
+        this.quadraticCurveTo(x, y + h, x, y + h - radii.bl);
+        this.lineTo(x, y + radii.tl);
+        this.quadraticCurveTo(x, y, x + radii.tl, y);
+        this.closePath();
+        return this;
+      };
+    }
 
     // Track state
     let segments: Segment[] = [];
@@ -170,8 +229,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     let driftAngle = 0;
     const totalLaps = 2;
     
-    const maxSpeed = 12000 + (carConfig.engine - 1) * 1500;
-    const accel = maxSpeed / 5;
+    const modelStats = CAR_MODELS[carConfig.model].baseStats;
+    const maxSpeed = modelStats.maxSpeed + (carConfig.engine - 1) * 1500;
+    const accel = modelStats.accel + (carConfig.engine - 1) * 500;
     const breaking = -maxSpeed * 1.5;
     const decel = -maxSpeed / 5;
     const offRoadDecel = -maxSpeed / 2;
@@ -198,7 +258,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       percent: 0,
       lap: 1,
       color: ['#ef4444', '#3b82f6', '#facc15', '#a855f7', '#ec4899', '#f97316', '#06b6d4', '#8b5cf6'][Math.floor(Math.random() * 8)],
-      plate: generatePlate()
+      plate: generatePlate(),
+      model: (['speedster', 'muscle', 'tuner'] as CarModelType[])[Math.floor(Math.random() * 3)]
     }));
 
     // Input
@@ -213,17 +274,17 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     window.addEventListener('keyup', handleKeyUp);
 
     // Track Generation
+    const theme = THEMES[trackTheme];
     const addSegment = (curve: number, y: number) => {
       const n = segments.length;
+      const isLight = Math.floor(n / RUMBLE_LENGTH) % 2;
       segments.push({
         index: n,
         p1: { world: { x: 0, y: lastY(), z: n * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
         p2: { world: { x: 0, y: y, z: (n + 1) * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
         curve: curve,
         sprites: [],
-        color: Math.floor(n / RUMBLE_LENGTH) % 2 ? 
-          { road: '#333', grass: '#10b981', rumble: '#fff', lane: '#fff' } : 
-          { road: '#3a3a3a', grass: '#059669', rumble: '#000' }
+        color: isLight ? theme.colors.light : theme.colors.dark
       });
     };
 
@@ -257,9 +318,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       const addHill = (enter: number, hold: number, leave: number, hill: number) => addRoad(enter, hold, leave, 0, hill);
       const addBumps = () => {
         const numBumps = 4 + Math.floor(random() * 6);
+        const bumpSeverity = 5 * theme.bumps;
         for (let i = 0; i < numBumps; i++) {
-          addRoad(10, 10, 10, 0, 5);
-          addRoad(10, 10, 10, 0, -5);
+          addRoad(10, 10, 10, 0, bumpSeverity);
+          addRoad(10, 10, 10, 0, -bumpSeverity);
         }
       };
       const addSCurves = () => {
@@ -315,8 +377,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         if (random() > 0.4) {
           const side = random() > 0.5 ? 1 : -1;
           const offset = (1.5 + random() * 3) * side;
+          const spriteType = theme.scenery[Math.floor(random() * theme.scenery.length)];
           segments[n].sprites.push({ 
-            source: 'tree', 
+            source: spriteType, 
             offset: offset, 
             scale: 1.5 + random() * 2 
           });
@@ -381,6 +444,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     let slipstreamParticles: { x: number; z: number; life: number; opacity: number }[] = [];
     let isSlipstreaming = false;
 
+    let bounceY = 0;
+    let bounceTimer = 0;
+
     const update = (dt: number) => {
       if (finished) {
         audioManager.stopMusic();
@@ -390,6 +456,16 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       if (isPausedRef.current) {
         audioManager.update(0, false, false);
         return;
+      }
+
+      const speedPercent = speed / maxSpeed;
+
+      // Bumpy Road Physics
+      bounceTimer += dt * speedPercent * 20;
+      const bumpSeverity = theme.bumps * (speedPercent * 10);
+      bounceY = Math.sin(bounceTimer) * bumpSeverity;
+      if (Math.random() > 0.95 && theme.bumps > 1) { // Random sharp bumps on mountain
+        bounceY += (Math.random() - 0.5) * 15;
       }
 
       // Checkpoint Timer Update
@@ -414,7 +490,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       }
 
       const playerSegment = findSegment(position + playerZ);
-      const speedPercent = speed / maxSpeed;
 
       // Checkpoint Passing Detection
       if (playerSegment.checkpoint && !playerSegment.passed) {
@@ -515,7 +590,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       }
 
       // Controls
-      const grip = (weather === 'rain' ? 0.7 : 1.0) + (carConfig.tires - 1) * 0.1;
+      const handlingBoost = CAR_MODELS[carConfig.model].baseStats.handling;
+      const grip = (((weather === 'rain' ? 0.7 : 1.0) * theme.grip) + (carConfig.tires - 1) * 0.1) * handlingBoost;
       const slipstreamBoost = isSlipstreaming ? 1.2 : 1.0;
       const driftFactor = isDrifting ? 2.8 : 1.0;
       const driftSlowdown = isDrifting ? 0.975 : 1.0;
@@ -682,70 +758,97 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         skyGrad.addColorStop(0, '#0f172a');
         skyGrad.addColorStop(1, '#1e293b');
       } else {
-        skyGrad.addColorStop(0, '#1e40af'); // Deep blue
-        skyGrad.addColorStop(1, '#60a5fa'); // Light blue
+        skyGrad.addColorStop(0, theme.sky);
+        skyGrad.addColorStop(1, shadeColor(theme.sky, 20));
       }
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
 
-      // Draw Ground (to cover gaps between road and horizon)
-      ctx.fillStyle = weather === 'rain' ? '#1a2e21' : '#065f46';
+      // Draw Ground
+      ctx.fillStyle = theme.colors.dark.grass;
       ctx.fillRect(0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
 
       // Sun / Horizon Glow
-      if (weather === 'clear') {
+      if (weather === 'clear' && trackTheme !== 'city') {
         const sunGrad = ctx.createRadialGradient(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 200);
-        sunGrad.addColorStop(0, 'rgba(255, 255, 200, 0.4)');
+        sunGrad.addColorStop(0, trackTheme === 'desert' ? 'rgba(255, 200, 100, 0.4)' : 'rgba(255, 255, 200, 0.4)');
         sunGrad.addColorStop(1, 'rgba(255, 255, 200, 0)');
         ctx.fillStyle = sunGrad;
         ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
       }
 
-      // Mountains (Detailed with shading)
-      ctx.fillStyle = '#064e3b';
-      ctx.beginPath();
-      ctx.moveTo(0, SCREEN_HEIGHT / 2);
-      ctx.lineTo(150, 120);
-      ctx.lineTo(300, 300);
-      ctx.lineTo(450, 80);
-      ctx.lineTo(600, 250);
-      ctx.lineTo(800, SCREEN_HEIGHT / 2);
-      ctx.fill();
+      // Theme-specific Background Elements
+      if (trackTheme === 'mountain') {
+        // Distant Mountains
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.moveTo(0, SCREEN_HEIGHT / 2);
+        ctx.lineTo(100, 150);
+        ctx.lineTo(250, 280);
+        ctx.lineTo(400, 100);
+        ctx.lineTo(550, 220);
+        ctx.lineTo(700, 140);
+        ctx.lineTo(800, SCREEN_HEIGHT / 2);
+        ctx.fill();
 
-      // Cityscape (Static)
-      ctx.fillStyle = '#1e293b';
-      if (cityscapeRef.current.length === 0) {
-        for (let i = 0; i < 10; i++) {
-          cityscapeRef.current.push({ x: i * 100, h: 50 + Math.random() * 150 });
+        // Snow Peaks
+        ctx.fillStyle = '#f8fafc';
+        ctx.beginPath();
+        ctx.moveTo(100, 150); ctx.lineTo(80, 190); ctx.lineTo(120, 190); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(400, 100); ctx.lineTo(370, 150); ctx.lineTo(430, 150); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(700, 140); ctx.lineTo(670, 180); ctx.lineTo(730, 180); ctx.fill();
+      } else if (trackTheme === 'city') {
+        if (cityscapeRef.current.length === 0) {
+          for (let i = 0; i < 20; i++) {
+            cityscapeRef.current.push({ 
+              x: i * 50, 
+              h: 150 + Math.random() * 250, 
+              w: 40 + Math.random() * 60,
+              windows: Array.from({ length: 10 }, () => ({
+                x: 5 + Math.random() * 30,
+                y: 10 + Math.random() * 100,
+                on: Math.random() > 0.3
+              }))
+            });
+          }
+        }
+        cityscapeRef.current.forEach(b => {
+          ctx.fillStyle = '#020617';
+          ctx.fillRect(b.x, SCREEN_HEIGHT / 2 - b.h, b.w, b.h);
+          // Windows
+          b.windows.forEach((w: any) => {
+            if (w.on) {
+              ctx.fillStyle = Math.random() > 0.9 ? '#fde047' : '#334155';
+              ctx.fillRect(b.x + w.x, SCREEN_HEIGHT / 2 - b.h + w.y, 4, 4);
+            }
+          });
+          // Red beacon on top
+          if (b.h > 300) {
+            ctx.fillStyle = Date.now() % 1000 > 500 ? '#ef4444' : '#450a0a';
+            ctx.fillRect(b.x + b.w / 2 - 2, SCREEN_HEIGHT / 2 - b.h - 5, 4, 4);
+          }
+        });
+      } else if (trackTheme === 'desert') {
+        // Dunes
+        ctx.fillStyle = '#92400e';
+        ctx.beginPath();
+        ctx.moveTo(0, SCREEN_HEIGHT / 2);
+        ctx.quadraticCurveTo(200, SCREEN_HEIGHT / 2 - 40, 400, SCREEN_HEIGHT / 2);
+        ctx.quadraticCurveTo(600, SCREEN_HEIGHT / 2 - 80, 800, SCREEN_HEIGHT / 2);
+        ctx.fill();
+        
+        // Heat Haze Effect
+        if (weather === 'clear') {
+          ctx.fillStyle = 'rgba(251, 146, 60, 0.05)';
+          for (let i = 0; i < 5; i++) {
+            const hazeY = SCREEN_HEIGHT / 2 - 20 - i * 10;
+            const hazeOffset = Math.sin(Date.now() / 200 + i) * 10;
+            ctx.fillRect(hazeOffset, hazeY, SCREEN_WIDTH, 5);
+          }
         }
       }
-      cityscapeRef.current.forEach(b => ctx.fillRect(b.x, SCREEN_HEIGHT / 2 - b.h, 80, b.h));
-
-      // Mountain Shading
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-      ctx.beginPath();
-      ctx.moveTo(150, 120);
-      ctx.lineTo(300, 300);
-      ctx.lineTo(150, 300);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(450, 80);
-      ctx.lineTo(600, 250);
-      ctx.lineTo(450, 250);
-      ctx.fill();
-
-      // Snow Peaks
-      ctx.fillStyle = '#f8fafc';
-      ctx.beginPath();
-      ctx.moveTo(150, 120);
-      ctx.lineTo(120, 160);
-      ctx.lineTo(180, 160);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(450, 80);
-      ctx.lineTo(420, 120);
-      ctx.lineTo(480, 120);
-      ctx.fill();
 
       const baseSegment = findSegment(position);
       const basePercent = (position % SEGMENT_LENGTH) / SEGMENT_LENGTH;
@@ -767,7 +870,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         dx += segment.curve;
         segment.clip = maxy;
 
-        if (segment.p1.screen.y <= segment.p2.screen.y || segment.p2.screen.y >= maxy) continue;
+        if (segment.p1.screen.y <= segment.p2.screen.y || segment.p2.screen.y > maxy) continue;
 
         // Draw Grass (with gradient)
         const grassGrad = ctx.createLinearGradient(0, segment.p2.screen.y, 0, segment.p1.screen.y);
@@ -847,7 +950,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         const segment = segments[(baseSegment.index + n) % segments.length];
         
         // Skip if segment is hidden behind a hill
-        if (segment.p1.screen.y >= (segment.clip || SCREEN_HEIGHT)) continue;
+        if (segment.p2.screen.y > (segment.clip || SCREEN_HEIGHT)) continue;
 
         // Checkpoints
         if (segment.checkpoint) {
@@ -858,18 +961,28 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
           drawCheckpoint(ctx, archX, archY, archW, archH, segment.passed || false);
         }
 
-        // Trees
+        // Scenery
         segment.sprites.forEach(sprite => {
           const spriteX = segment.p1.screen.x + (segment.p1.screen.w * sprite.offset);
           const spriteY = segment.p1.screen.y;
           const spriteW = (sprite.scale * segment.p1.screen.w / 2);
           const spriteH = spriteW * 1.5;
-          drawTree(ctx, spriteX, spriteY, spriteW, spriteH);
+          
+          switch(sprite.source) {
+            case 'cactus': drawCactus(ctx, spriteX, spriteY, spriteW, spriteH); break;
+            case 'building': drawBuilding(ctx, spriteX, spriteY, spriteW, spriteH); break;
+            case 'pine': drawPine(ctx, spriteX, spriteY, spriteW, spriteH); break;
+            case 'rock': drawRock(ctx, spriteX, spriteY, spriteW, spriteH); break;
+            default: drawTree(ctx, spriteX, spriteY, spriteW, spriteH); break;
+          }
         });
 
         // Other Players
         Object.values(otherPlayersRef.current).forEach((player: any) => {
+          if (!player || typeof player.z !== 'number' || !player.carConfig) return;
           const playerSegment = findSegment(player.z);
+          if (!playerSegment) return;
+          
           // Only render if in view
           if (playerSegment.index >= baseSegment.index && playerSegment.index < baseSegment.index + DRAW_DISTANCE) {
             const relativeZ = player.z - position;
@@ -880,7 +993,15 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
               const screenW = Math.round(scale * CAR_WIDTH * SCREEN_WIDTH / 2);
               const screenH = screenW * 0.6;
               
-              drawOpponentCar(ctx, screenX, screenY, screenW, screenH, player.carConfig.color, player.id.substring(0, 4));
+              const opponentConfig: CarConfig = {
+                model: player.carConfig.model || 'speedster',
+                color: player.carConfig.color,
+                spoiler: player.carConfig.spoiler || 'large',
+                rims: '#fff',
+                decal: 'none',
+                engine: 1, tires: 1, turbo: 1
+              };
+              drawCar(ctx, screenX, screenY, screenW, screenH, opponentConfig, false, 0, 0, player.id.substring(0, 4));
             }
           }
         });
@@ -892,13 +1013,24 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
             const oppY = segment.p1.screen.y;
             const oppW = (segment.p1.screen.w * (CAR_WIDTH / ROAD_WIDTH));
             const oppH = oppW * 0.6;
-            drawOpponentCar(ctx, oppX, oppY, oppW, oppH, opp.color, opp.plate);
+            const oppConfig: CarConfig = {
+              model: opp.model,
+              color: opp.color,
+              spoiler: 'large',
+              rims: '#fff',
+              decal: 'none',
+              engine: 1, tires: 1, turbo: 1
+            };
+            drawCar(ctx, oppX, oppY, oppW, oppH, oppConfig, false, 0, 0, opp.plate);
           }
         });
       }
 
       // Render Player Car (Rear View)
       const isBraking = keysRef.current['ArrowDown'] || keysRef.current['KeyS'];
+      
+      // Draw car with bounceY
+      drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60 + bounceY, 180, 110, carConfig, isBraking, damage, driftAngle, "YOU");
 
       // Slipstream Screen Effect
       if (isSlipstreaming) {
@@ -925,7 +1057,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       });
       ctx.globalAlpha = 1.0;
 
-      drawPlayerCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 180, 110, carConfig, isBraking, damage, driftAngle);
+      drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 180, 110, carConfig, isBraking, damage, driftAngle, "DRIFT");
 
       // Rain Rendering
       if (weather === 'rain') {
@@ -1092,100 +1224,46 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     ctx.fill();
   };
 
-  const drawOpponentCar = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, plate: string) => {
+  const drawCactus = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+    ctx.fillStyle = '#166534';
+    ctx.fillRect(x - w / 6, y - h, w / 3, h);
+    ctx.fillRect(x - w / 2, y - h * 0.7, w / 3, h / 10);
+    ctx.fillRect(x - w / 2, y - h * 0.8, w / 6, h / 5);
+    ctx.fillRect(x + w / 6, y - h * 0.5, w / 3, h / 10);
+    ctx.fillRect(x + w / 3, y - h * 0.6, w / 6, h / 5);
+  };
+
+  const drawBuilding = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(x - w / 2, y - h, w, h);
+    ctx.fillStyle = '#fde047';
+    for (let i = 0; i < 2; i++) {
+      for (let j = 0; j < 4; j++) {
+        if (Math.random() > 0.3) {
+          ctx.fillRect(x - w / 2 + 5 + i * (w / 3), y - h + 5 + j * (h / 5), w / 6, h / 10);
+        }
+      }
+    }
+  };
+
+  const drawCar = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig, isBraking: boolean, damage: number = 0, driftAngle: number = 0, plate: string = "") => {
+    const model = CAR_MODELS[config.model];
+    const color = config.color;
+    const visuals = model.visuals;
+    
     ctx.save();
+
+    // Apply Drift Tilt
+    if (driftAngle !== 0) {
+      ctx.translate(x, y);
+      ctx.rotate(driftAngle);
+      ctx.translate(-x, -y);
+    }
     
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(x, y, w * 0.6, h * 0.2, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Wheels (Ellipses for 3D look)
-    ctx.fillStyle = '#111';
-    ctx.beginPath();
-    ctx.ellipse(x - w * 0.4, y - h * 0.15, w * 0.1, h * 0.15, 0, 0, Math.PI * 2);
-    ctx.ellipse(x + w * 0.4, y - h * 0.15, w * 0.1, h * 0.15, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Side Mirrors
-    ctx.fillStyle = shadeColor(color, -20);
-    ctx.fillRect(x - w * 0.48, y - h * 0.65, w * 0.08, h * 0.1);
-    ctx.fillRect(x + w * 0.4, y - h * 0.65, w * 0.08, h * 0.1);
-
-    // Spoiler
-    ctx.fillStyle = '#222';
-    ctx.fillRect(x - w / 2, y - h - 10, w, 6); // Wing
-    ctx.fillRect(x - w * 0.35, y - h - 10, 3, 10); // Left mount
-    ctx.fillRect(x + w * 0.35 - 3, y - h - 10, 3, 10); // Right mount
-
-    // Car Body - Lower (Flared)
-    const gradient = ctx.createLinearGradient(x, y - h, x, y);
-    gradient.addColorStop(0, color);
-    gradient.addColorStop(1, shadeColor(color, -30));
-    ctx.fillStyle = gradient;
-    
-    ctx.beginPath();
-    ctx.moveTo(x - w / 2, y - h * 0.1);
-    ctx.bezierCurveTo(x - w / 2, y - h * 0.4, x - w * 0.45, y - h * 0.6, x - w * 0.45, y - h * 0.6);
-    ctx.lineTo(x + w * 0.45, y - h * 0.6);
-    ctx.bezierCurveTo(x + w * 0.45, y - h * 0.6, x + w / 2, y - h * 0.4, x + w / 2, y - h * 0.1);
-    ctx.closePath();
-    ctx.fill();
-
-    // Car Body - Upper (Tapered Cabin)
-    ctx.fillStyle = shadeColor(color, -10);
-    ctx.beginPath();
-    ctx.moveTo(x - w * 0.4, y - h * 0.6);
-    ctx.bezierCurveTo(x - w * 0.35, y - h * 0.8, x - w * 0.3, y - h, x - w * 0.3, y - h);
-    ctx.lineTo(x + w * 0.3, y - h);
-    ctx.bezierCurveTo(x + w * 0.3, y - h, x + w * 0.35, y - h * 0.8, x + w * 0.4, y - h * 0.6);
-    ctx.closePath();
-    ctx.fill();
-
-    // Rear Window
-    ctx.fillStyle = '#1e293b';
-    ctx.beginPath();
-    ctx.moveTo(x - w * 0.25, y - h + 5);
-    ctx.lineTo(x + w * 0.25, y - h + 5);
-    ctx.lineTo(x + w * 0.35, y - h * 0.6 - 5);
-    ctx.lineTo(x - w * 0.35, y - h * 0.6 - 5);
-    ctx.closePath();
-    ctx.fill();
-
-    // Tail Lights
-    ctx.fillStyle = '#ef4444';
-    ctx.shadowBlur = 5;
-    ctx.shadowColor = '#ef4444';
-    ctx.beginPath();
-    ctx.roundRect(x - w * 0.42, y - h * 0.5, w / 5, h / 10, 2);
-    ctx.roundRect(x + w * 0.42 - w / 5, y - h * 0.5, w / 5, h / 10, 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // License Plate
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(x - 12, y - h * 0.2, 24, 10);
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 7px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(plate, x, y - h * 0.2 + 8);
-
-    ctx.restore();
-  };
-
-  const drawPlayerCar = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: any, isBraking: boolean, damage: number = 0, driftAngle: number = 0) => {
-    ctx.save();
-
-    // Apply Drift Tilt
-    ctx.translate(x, y);
-    ctx.rotate(driftAngle);
-    ctx.translate(-x, -y);
-
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.beginPath();
-    ctx.ellipse(x, y + 5, w * 0.7, h * 0.25, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y, w * 0.6 * visuals.bodyWidth, h * 0.2, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Smoke if damaged
@@ -1198,226 +1276,122 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       }
     }
 
-    // Wheels (Flared Arches with 3D Ellipses)
-    ctx.fillStyle = '#000';
+    // Wheels
+    ctx.fillStyle = '#111';
     ctx.beginPath();
-    ctx.ellipse(x - w * 0.45, y - h * 0.2, w * 0.12, h * 0.2, 0, 0, Math.PI * 2);
-    ctx.ellipse(x + w * 0.45, y - h * 0.2, w * 0.12, h * 0.2, 0, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Rims
-    ctx.fillStyle = config.rims;
-    ctx.beginPath();
-    ctx.ellipse(x - w * 0.45, y - h * 0.2, w * 0.06, h * 0.1, 0, 0, Math.PI * 2);
-    ctx.ellipse(x + w * 0.45, y - h * 0.2, w * 0.06, h * 0.1, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Side Mirrors
-    ctx.fillStyle = shadeColor(config.color, -30);
-    ctx.beginPath();
-    ctx.roundRect(x - w * 0.52, y - h * 0.65, w * 0.1, h * 0.12, 3);
-    ctx.roundRect(x + w * 0.42, y - h * 0.65, w * 0.1, h * 0.12, 3);
+    ctx.ellipse(x - w * 0.4 * visuals.bodyWidth, y - h * 0.15, w * 0.1, h * 0.15, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + w * 0.4 * visuals.bodyWidth, y - h * 0.15, w * 0.1, h * 0.15, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Spoiler
     if (config.spoiler !== 'none') {
-      ctx.fillStyle = '#111';
+      ctx.fillStyle = '#222';
+      const spoilerY = y - h * visuals.bodyHeight - h * visuals.cabinHeight;
+      const spoilerW = w * visuals.bodyWidth * (config.spoiler === 'large' ? 1.1 : 0.9);
       
-      if (config.spoiler === 'small') {
-        // Low-profile Lip / Ducktail Spoiler
-        const wingWidth = w * 0.9;
-        const wingHeight = 8;
+      if (visuals.spoilerType === 'wing') {
+        ctx.fillRect(x - spoilerW / 2, spoilerY - 10, spoilerW, 6); // Wing
+        ctx.fillRect(x - spoilerW * 0.35, spoilerY - 10, 3, 10); // Left mount
+        ctx.fillRect(x + spoilerW * 0.35 - 3, spoilerY - 10, 3, 10); // Right mount
+      } else {
+        // Ducktail
         ctx.beginPath();
-        ctx.moveTo(x - wingWidth / 2, y - h);
-        ctx.lineTo(x + wingWidth / 2, y - h);
-        ctx.lineTo(x + wingWidth / 2 + 5, y - h - wingHeight);
-        ctx.lineTo(x - wingWidth / 2 - 5, y - h - wingHeight);
-        ctx.closePath();
+        ctx.moveTo(x - spoilerW / 2, spoilerY);
+        ctx.lineTo(x + spoilerW / 2, spoilerY);
+        ctx.lineTo(x + spoilerW / 2, spoilerY - 8);
+        ctx.lineTo(x - spoilerW / 2, spoilerY - 8);
         ctx.fill();
-        
-        // Subtle shading
-        ctx.fillStyle = 'rgba(255,255,255,0.1)';
-        ctx.fillRect(x - wingWidth / 2, y - h - wingHeight, wingWidth, 2);
-      } else if (config.spoiler === 'large') {
-        // Aggressive GT Wing with Swan-neck mounts
-        const wingWidth = w + 50;
-        const wingHeight = 32;
-        
-        // Wing Main (Aerodynamic Curve)
-        ctx.fillStyle = '#0a0a0a';
-        ctx.beginPath();
-        ctx.moveTo(x - wingWidth / 2, y - h - wingHeight);
-        ctx.quadraticCurveTo(x, y - h - wingHeight - 5, x + wingWidth / 2, y - h - wingHeight);
-        ctx.lineTo(x + wingWidth / 2, y - h - wingHeight + 6);
-        ctx.quadraticCurveTo(x, y - h - wingHeight + 1, x - wingWidth / 2, y - h - wingHeight + 6);
-        ctx.closePath();
-        ctx.fill();
-        
-        // End Plates (Aerodynamic Shape)
-        ctx.fillStyle = '#111';
-        ctx.beginPath();
-        ctx.roundRect(x - wingWidth / 2 - 2, y - h - wingHeight - 8, 6, 20, 2);
-        ctx.roundRect(x + wingWidth / 2 - 4, y - h - wingHeight - 8, 6, 20, 2);
-        ctx.fill();
-
-        // Swan-neck Mounts (More realistic)
-        ctx.strokeStyle = '#111';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        // Left mount
-        ctx.moveTo(x - w * 0.2, y - h + 5);
-        ctx.quadraticCurveTo(x - w * 0.25, y - h - wingHeight / 2, x - w * 0.15, y - h - wingHeight);
-        // Right mount
-        ctx.moveTo(x + w * 0.2, y - h + 5);
-        ctx.quadraticCurveTo(x + w * 0.25, y - h - wingHeight / 2, x + w * 0.15, y - h - wingHeight);
-        ctx.stroke();
       }
     }
 
-    // Car Body - Lower (Aggressive Widebody Curves)
-    const bodyGrad = ctx.createLinearGradient(x, y - h, x, y);
-    bodyGrad.addColorStop(0, config.color);
-    bodyGrad.addColorStop(1, shadeColor(config.color, -40));
-    ctx.fillStyle = bodyGrad;
+    // Car Body - Lower
+    const gradient = ctx.createLinearGradient(x, y - h * visuals.bodyHeight, x, y);
+    gradient.addColorStop(0, color);
+    gradient.addColorStop(1, shadeColor(color, -30));
+    ctx.fillStyle = gradient;
+    
+    const bodyW = w * visuals.bodyWidth;
+    const bodyH = h * visuals.bodyHeight;
     
     ctx.beginPath();
-    ctx.moveTo(x - w / 2, y - h * 0.1);
-    ctx.bezierCurveTo(x - w / 2, y - h * 0.4, x - w * 0.48, y - h * 0.6, x - w * 0.48, y - h * 0.6);
-    ctx.lineTo(x + w * 0.48, y - h * 0.6);
-    ctx.bezierCurveTo(x + w * 0.48, y - h * 0.6, x + w / 2, y - h * 0.4, x + w / 2, y - h * 0.1);
+    ctx.moveTo(x - bodyW / 2, y - bodyH * 0.1);
+    ctx.bezierCurveTo(x - bodyW / 2, y - bodyH * 0.4, x - bodyW * 0.45, y - bodyH * 0.6, x - bodyW * 0.45, y - bodyH * 0.6);
+    ctx.lineTo(x + bodyW * 0.45, y - bodyH * 0.6);
+    ctx.bezierCurveTo(x + bodyW * 0.45, y - bodyH * 0.6, x + bodyW / 2, y - bodyH * 0.4, x + bodyW / 2, y - bodyH * 0.1);
     ctx.closePath();
     ctx.fill();
 
-    // Body Highlight (Top edge of widebody)
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Rear Diffuser / Bumper
-    ctx.fillStyle = '#0a0a0a';
+    // Car Body - Upper (Cabin)
+    ctx.fillStyle = shadeColor(color, -10);
+    const cabinW = w * visuals.cabinWidth;
+    const cabinH = h * visuals.cabinHeight;
+    const cabinY = y - bodyH * 0.6;
+    
     ctx.beginPath();
-    ctx.roundRect(x - w / 2, y - h * 0.18, w, h * 0.18, 5);
-    ctx.fill();
-
-    // Car Body - Upper (Tapered Sports Cabin with Curves)
-    ctx.fillStyle = shadeColor(config.color, -15);
-    ctx.beginPath();
-    ctx.moveTo(x - w * 0.42, y - h * 0.6);
-    ctx.bezierCurveTo(x - w * 0.38, y - h * 0.85, x - w * 0.32, y - h, x - w * 0.32, y - h);
-    ctx.lineTo(x + w * 0.32, y - h);
-    ctx.bezierCurveTo(x + w * 0.32, y - h, x + w * 0.38, y - h * 0.85, x + w * 0.42, y - h * 0.6);
+    ctx.moveTo(x - cabinW / 2, cabinY);
+    ctx.bezierCurveTo(x - cabinW * 0.9, cabinY - cabinH * 0.5, x - cabinW * 0.8, cabinY - cabinH, x - cabinW * 0.8, cabinY - cabinH);
+    ctx.lineTo(x + cabinW * 0.8, cabinY - cabinH);
+    ctx.bezierCurveTo(x + cabinW * 0.8, cabinY - cabinH, x + cabinW * 0.9, cabinY - cabinH * 0.5, x + cabinW / 2, cabinY);
     ctx.closePath();
     ctx.fill();
 
-    // Roof Highlight
-    const roofGrad = ctx.createLinearGradient(x, y - h, x, y - h + 10);
-    roofGrad.addColorStop(0, 'rgba(255,255,255,0.2)');
-    roofGrad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = roofGrad;
-    ctx.fill();
-
-    // Decals
-    if (config.decal === 'stripes') {
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.fillRect(x - w / 10, y - h, w / 20, h);
-      ctx.fillRect(x + w / 20, y - h, w / 20, h);
-    } else if (config.decal === 'racing-number') {
-      ctx.fillStyle = 'white';
-      ctx.beginPath();
-      ctx.arc(x, y - h * 0.45, w / 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'black';
-      ctx.font = `bold ${h / 5}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('86', x, y - h * 0.45);
-    }
-
-    // Rear Window (Blue Reflection)
-    const winGrad = ctx.createLinearGradient(x, y - h + 15, x, y - h + 15 + h / 2.5);
-    winGrad.addColorStop(0, '#3b82f6');
-    winGrad.addColorStop(0.5, '#60a5fa');
-    winGrad.addColorStop(1, '#1d4ed8');
-    ctx.fillStyle = winGrad;
+    // Rear Window
+    ctx.fillStyle = '#1e293b';
     ctx.beginPath();
-    ctx.moveTo(x - w * 0.28, y - h + 12);
-    ctx.lineTo(x + w * 0.28, y - h + 12);
-    ctx.lineTo(x + w * 0.38, y - h * 0.6 - 8);
-    ctx.lineTo(x - w * 0.38, y - h * 0.6 - 8);
+    ctx.moveTo(x - cabinW * 0.6, cabinY - cabinH + 5);
+    ctx.lineTo(x + cabinW * 0.6, cabinY - cabinH + 5);
+    ctx.lineTo(x + cabinW * 0.7, cabinY - 5);
+    ctx.lineTo(x - cabinW * 0.7, cabinY - 5);
     ctx.closePath();
     ctx.fill();
 
-    // Damage Cracks on window
-    if (damage > 20) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x - w * 0.1, y - h + 20);
-      ctx.lineTo(x + w * 0.1, y - h + 40);
-      ctx.moveTo(x + w * 0.05, y - h + 25);
-      ctx.lineTo(x - w * 0.05, y - h + 45);
-      ctx.stroke();
-    }
-    
-    if (damage > 60) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.beginPath();
-      ctx.moveTo(x - w * 0.2, y - h + 15);
-      ctx.lineTo(x - w * 0.1, y - h + 35);
-      ctx.stroke();
-    }
-
-    // Tail Lights (Vibrant Red with Bloom)
-    ctx.fillStyle = isBraking ? '#ff0000' : '#880000';
-    ctx.shadowBlur = isBraking ? 45 : 25;
-    ctx.shadowColor = '#ff0000';
+    // Tail Lights
+    ctx.fillStyle = isBraking ? '#ff0000' : '#ef4444';
+    ctx.shadowBlur = isBraking ? 15 : 5;
+    ctx.shadowColor = '#ef4444';
     ctx.beginPath();
-    ctx.roundRect(x - w * 0.44, y - h * 0.52, w / 4, h / 10, 3);
-    ctx.roundRect(x + w * 0.44 - w / 4, y - h * 0.52, w / 4, h / 10, 3);
-    ctx.fill();
-    
-    // Inner light glow
-    ctx.fillStyle = isBraking ? '#ffffff' : '#ffcccc';
-    ctx.shadowBlur = isBraking ? 25 : 10;
-    ctx.beginPath();
-    ctx.roundRect(x - w * 0.38, y - h * 0.5 + 1, w / 15, h / 20, 1);
-    ctx.roundRect(x + w * 0.38 - w / 15, y - h * 0.5 + 1, w / 15, h / 20, 1);
+    ctx.roundRect(x - bodyW * 0.42, y - bodyH * 0.5, bodyW / 5, bodyH / 10, 2);
+    ctx.roundRect(x + bodyW * 0.42 - bodyW / 5, y - bodyH * 0.5, bodyW / 5, bodyH / 10, 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Third Brake Light
-    if (isBraking) {
-      ctx.fillStyle = '#ff0000';
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = '#ff0000';
-      ctx.fillRect(x - 15, y - h + 5, 30, 4);
-      ctx.shadowBlur = 0;
-    }
-
-    // Exhaust Pipes
-    ctx.fillStyle = '#71717a';
-    ctx.beginPath();
-    ctx.arc(x - w / 4, y - 8, 12, 0, Math.PI * 2);
-    ctx.arc(x + w / 4, y - 8, 12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#18181b';
-    ctx.beginPath();
-    ctx.arc(x - w / 4, y - 8, 8, 0, Math.PI * 2);
-    ctx.arc(x + w / 4, y - 8, 8, 0, Math.PI * 2);
-    ctx.fill();
-
     // License Plate
-    ctx.fillStyle = '#facc15'; // Yellow plate
-    ctx.beginPath();
-    ctx.roundRect(x - 22, y - h * 0.28, 44, 16, 2);
-    ctx.fill();
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('DRIFT', x, y - h * 0.28 + 12);
+    if (plate) {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(x - 12, y - bodyH * 0.2, 24, 10);
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 7px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(plate, x, y - bodyH * 0.2 + 8);
+    }
 
     ctx.restore();
   };
+
+  const drawPine = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+    ctx.fillStyle = '#3d2b1f';
+    ctx.fillRect(x - w / 10, y - h * 0.2, w / 5, h * 0.2);
+    ctx.fillStyle = '#064e3b';
+    ctx.beginPath();
+    ctx.moveTo(x, y - h);
+    ctx.lineTo(x - w / 2, y - h * 0.2);
+    ctx.lineTo(x + w / 2, y - h * 0.2);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  const drawRock = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+    ctx.fillStyle = '#475569';
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2, y);
+    ctx.lineTo(x - w / 3, y - h);
+    ctx.lineTo(x + w / 3, y - h * 0.8);
+    ctx.lineTo(x + w / 2, y);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+
 
   const shadeColor = (color: string, percent: number) => {
     let R = parseInt(color.substring(1, 3), 16);
@@ -1702,116 +1676,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
                       {w}
                     </button>
                   ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Body Color</label>
-                <div className="flex gap-2">
-                  {['#4ade80', '#ef4444', '#3b82f6', '#facc15', '#ffffff', '#18181b'].map(c => (
-                    <button
-                      key={c}
-                      onClick={() => setCarConfig(prev => ({ ...prev, color: c }))}
-                      className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${carConfig.color === c ? 'border-white scale-110' : 'border-transparent'}`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Spoiler</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['none', 'small', 'large'] as const).map(s => (
-                    <button
-                      key={s}
-                      onClick={() => setCarConfig(prev => ({ ...prev, spoiler: s }))}
-                      className={`py-2 text-[10px] font-bold uppercase border transition-colors ${carConfig.spoiler === s ? 'bg-white text-black border-white' : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500'}`}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Decals</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['none', 'stripes', 'racing-number'] as const).map(d => (
-                    <button
-                      key={d}
-                      onClick={() => setCarConfig(prev => ({ ...prev, decal: d }))}
-                      className={`py-2 text-[10px] font-bold uppercase border transition-colors ${carConfig.decal === d ? 'bg-white text-black border-white' : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500'}`}
-                    >
-                      {d.replace('-', ' ')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Rims</label>
-                <div className="flex gap-2">
-                  {['#ffffff', '#000000', '#facc15', '#ef4444'].map(c => (
-                    <button
-                      key={c}
-                      onClick={() => setCarConfig(prev => ({ ...prev, rims: c }))}
-                      className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${carConfig.rims === c ? 'border-white scale-110' : 'border-transparent'}`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-4 pt-4 border-t border-zinc-800">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Performance Upgrades</h3>
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[10px] font-bold uppercase text-zinc-400">Engine Stage</label>
-                    <span className="text-[10px] font-mono text-emerald-500">S{carConfig.engine}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1">
-                    {[1, 2, 3].map(lvl => (
-                      <button
-                        key={lvl}
-                        onClick={() => setCarConfig(prev => ({ ...prev, engine: lvl }))}
-                        className={`h-1 transition-colors ${carConfig.engine >= lvl ? 'bg-emerald-500' : 'bg-zinc-800'}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[10px] font-bold uppercase text-zinc-400">Tire Compound</label>
-                    <span className="text-[10px] font-mono text-emerald-500">S{carConfig.tires}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1">
-                    {[1, 2, 3].map(lvl => (
-                      <button
-                        key={lvl}
-                        onClick={() => setCarConfig(prev => ({ ...prev, tires: lvl }))}
-                        className={`h-1 transition-colors ${carConfig.tires >= lvl ? 'bg-emerald-500' : 'bg-zinc-800'}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[10px] font-bold uppercase text-zinc-400">Turbo System</label>
-                    <span className="text-[10px] font-mono text-emerald-500">S{carConfig.turbo}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1">
-                    {[1, 2, 3].map(lvl => (
-                      <button
-                        key={lvl}
-                        onClick={() => setCarConfig(prev => ({ ...prev, turbo: lvl }))}
-                        className={`h-1 transition-colors ${carConfig.turbo >= lvl ? 'bg-emerald-500' : 'bg-zinc-800'}`}
-                      />
-                    ))}
-                  </div>
                 </div>
               </div>
             </div>

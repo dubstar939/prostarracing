@@ -4,11 +4,13 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { RacingGame } from './components/RacingGame';
-import { Trophy, Flag, Settings, Play, Info, Users, Globe, Loader2 } from 'lucide-react';
+import { RacingGame, TrackThemeType } from './components/RacingGame';
+import { Garage } from './components/Garage';
+import { Trophy, Flag, Settings, Play, Info, Users, Globe, Loader2, Map, ShoppingBag, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { socketService } from './services/socketService';
 import { GoogleGenAI } from '@google/genai';
+import { CarConfig, CAR_MODELS } from './types';
 
 function useCoverImage() {
   const [coverImage, setCoverImage] = useState<string | null>(localStorage.getItem('coverImage'));
@@ -54,11 +56,44 @@ function useCoverImage() {
 }
 
 export default function App() {
-  const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby'>('title');
-  const [level, setLevel] = useState(1);
-  const [lastResult, setLastResult] = useState<{ position: number; time: string } | null>(null);
+  const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'garage' | 'options' | 'mode-select'>('title');
+  const [level, setLevel] = useState(() => {
+    const saved = localStorage.getItem('racing_level');
+    return saved ? parseInt(saved, 10) : 1;
+  });
+  const [money, setMoney] = useState(() => {
+    const saved = localStorage.getItem('racing_money');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+  const [carConfig, setCarConfig] = useState<CarConfig>(() => {
+    const saved = localStorage.getItem('racing_car_config');
+    return saved ? JSON.parse(saved) : {
+      model: 'speedster',
+      color: '#4ade80',
+      spoiler: 'large',
+      rims: '#ffffff',
+      decal: 'none',
+      engine: 1,
+      tires: 1,
+      turbo: 1
+    };
+  });
+  const [lastResult, setLastResult] = useState<{ position: number; time: string; reward: number } | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('racing_level', level.toString());
+  }, [level]);
+
+  useEffect(() => {
+    localStorage.setItem('racing_money', money.toString());
+  }, [money]);
+
+  useEffect(() => {
+    localStorage.setItem('racing_car_config', JSON.stringify(carConfig));
+  }, [carConfig]);
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [roomId, setRoomId] = useState('');
+  const [trackTheme, setTrackTheme] = useState<TrackThemeType>('city');
   const coverImage = useCoverImage();
 
   const startGame = () => {
@@ -80,7 +115,9 @@ export default function App() {
 
   const handleRaceEnd = (position: number, time: number) => {
     const timeStr = (time / 1000).toFixed(2) + 's';
-    setLastResult({ position, time: timeStr });
+    const reward = Math.max(0, (10 - position) * 200 + (position === 1 ? 500 : 0));
+    setMoney(prev => prev + reward);
+    setLastResult({ position, time: timeStr, reward });
     if (position === 1) {
       setGameState('level-complete');
     } else {
@@ -91,6 +128,15 @@ export default function App() {
   const nextLevel = () => {
     setLevel(prev => prev + 1);
     setGameState('playing');
+  };
+
+  const resetProgress = () => {
+    if (confirm('Are you sure you want to reset all progress? This will clear your level and car upgrades.')) {
+      localStorage.removeItem('racing_level');
+      localStorage.removeItem('racing_car_config');
+      setLevel(1);
+      window.location.reload();
+    }
   };
 
   const retryLevel = () => {
@@ -159,44 +205,181 @@ export default function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="text-center space-y-8 max-w-md px-6"
+            className="text-center space-y-12 max-w-md w-full px-6"
           >
             <div className="space-y-2">
-              <h1 className="text-4xl md:text-6xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-500 uppercase">
-                Pro Star-Racing
+              <h1 className="text-4xl md:text-7xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-500 uppercase">
+                Main Menu
               </h1>
-              <p className="text-zinc-500 font-mono text-sm tracking-widest uppercase">939PRO Arcade Racing</p>
+              <p className="text-zinc-500 font-mono text-xs tracking-[0.3em] uppercase">Select your destination</p>
+            </div>
+
+            <div className="flex flex-col gap-4 w-full">
+              <button
+                onClick={() => setGameState('mode-select')}
+                className="group relative flex items-center justify-center gap-3 bg-white text-black font-bold py-6 px-8 rounded-sm hover:bg-zinc-200 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+              >
+                <Play className="w-6 h-6 fill-current" />
+                <span className="uppercase tracking-tight text-xl">Start Game</span>
+                <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/20 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+              </button>
+
+              <button
+                onClick={() => setGameState('options')}
+                className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+              >
+                <Settings className="w-6 h-6 text-cyan-400" />
+                <span className="uppercase tracking-tight text-xl">Options</span>
+                <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+              </button>
+
+              <button
+                onClick={() => setGameState('title')}
+                className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+              >
+                <Flag className="w-6 h-6 text-red-500" />
+                <span className="uppercase tracking-tight text-xl">Quit</span>
+                <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+              </button>
+            </div>
+
+            <div className="flex justify-between items-center px-4 pt-8 border-t border-zinc-800/50">
+              <div className="text-zinc-500 font-mono text-[10px] uppercase tracking-widest">
+                v2.5.0-stable
+              </div>
+              <div className="text-zinc-500 font-mono text-[10px] uppercase tracking-widest">
+                © 2026 939PRO
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {gameState === 'mode-select' && (
+          <motion.div
+            key="mode-select"
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -50 }}
+            className="text-center space-y-8 max-w-md w-full px-6"
+          >
+            <div className="space-y-2 text-left">
+              <h2 className="text-4xl font-black italic uppercase tracking-tighter">Select Mode</h2>
+              <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest">Choose your racing experience</p>
             </div>
 
             <div className="grid grid-cols-1 gap-4 w-full">
               <button
                 onClick={startGame}
-                className="group relative flex items-center justify-center gap-3 bg-white text-black font-bold py-6 px-8 rounded-sm hover:bg-zinc-200 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+                className="group relative flex items-center justify-between bg-white text-black font-bold py-6 px-8 rounded-sm hover:bg-zinc-200 transition-all transform hover:skew-x-[-10deg] active:scale-95"
               >
-                <Play className="w-6 h-6 fill-current" />
-                <span className="uppercase tracking-tight text-lg">Start Race</span>
-                <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/20 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+                <div className="flex items-center gap-4">
+                  <Trophy className="w-6 h-6" />
+                  <div className="text-left">
+                    <div className="uppercase tracking-tight text-lg">Single Player</div>
+                    <div className="text-[10px] font-mono opacity-60">STREET {level} • PROGRESSION</div>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5" />
               </button>
 
               <button
                 onClick={startMultiplayer}
-                className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+                className="group relative flex items-center justify-between bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
               >
-                <Users className="w-6 h-6" />
-                <span className="uppercase tracking-tight text-lg">Multiplayer</span>
-                <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+                <div className="flex items-center gap-4">
+                  <Users className="w-6 h-6 text-cyan-400" />
+                  <div className="text-left">
+                    <div className="uppercase tracking-tight text-lg">Multiplayer</div>
+                    <div className="text-[10px] font-mono text-zinc-500">ONLINE ROOMS • COMPETITIVE</div>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5" />
               </button>
+
+              <button
+                onClick={() => setGameState('garage')}
+                className="group relative flex items-center justify-between bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+              >
+                <div className="flex items-center gap-4">
+                  <ShoppingBag className="w-6 h-6 text-emerald-400" />
+                  <div className="text-left">
+                    <div className="uppercase tracking-tight text-lg">Garage</div>
+                    <div className="text-[10px] font-mono text-zinc-500">CASH: ${money} • UPGRADES</div>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5" />
+              </button>
+
+              <button
+                onClick={() => setGameState('menu')}
+                className="mt-4 text-zinc-500 hover:text-white font-bold uppercase tracking-widest text-xs transition-colors"
+              >
+                Back to Main Menu
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {gameState === 'options' && (
+          <motion.div
+            key="options"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="text-center space-y-8 max-w-md w-full px-6"
+          >
+            <div className="space-y-2 text-left">
+              <h2 className="text-4xl font-black italic uppercase tracking-tighter">Options</h2>
+              <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest">Configure your game settings</p>
+            </div>
+
+            <div className="space-y-6 w-full">
+              <div className="bg-zinc-900/50 p-6 rounded-sm border border-zinc-800 text-left space-y-4">
+                <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  <Map className="w-4 h-4" /> Track Theme
+                </h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['city', 'desert', 'mountain'] as TrackThemeType[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTrackTheme(t)}
+                      className={`py-3 px-1 rounded-sm border text-[10px] uppercase font-bold transition-all ${
+                        trackTheme === t 
+                          ? 'bg-cyan-500 border-cyan-400 text-black' 
+                          : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div className="bg-zinc-900/50 p-6 rounded-sm border border-zinc-800 text-left space-y-4">
                 <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
-                  <Info className="w-4 h-4" /> Controls
+                  <Info className="w-4 h-4" /> Controls Reference
                 </h3>
-                <ul className="text-xs space-y-2 font-mono text-zinc-500">
-                  <li><span className="text-zinc-300">DRIVE</span> - WASD / Arrows or Touch Buttons</li>
-                  <li><span className="text-zinc-300">TURBO</span> - CTRL / Shift or Zap Button</li>
+                <ul className="text-[10px] space-y-2 font-mono text-zinc-500">
+                  <li><span className="text-zinc-300">DRIVE</span> - WASD / Arrows</li>
+                  <li><span className="text-zinc-300">TURBO</span> - CTRL / Shift</li>
                   <li><span className="text-zinc-300">DRIFT</span> - Release Gas + Turn + Brake</li>
-                  <li><span className="text-zinc-300">SLIPSTREAM</span> - Stay behind opponents</li>
                 </ul>
+              </div>
+
+              <div className="pt-4 space-y-4">
+                <button 
+                  onClick={resetProgress}
+                  className="w-full py-4 bg-red-900/20 text-red-400 border border-red-900/50 rounded-sm font-bold uppercase tracking-widest text-xs hover:bg-red-900/40 transition-all"
+                >
+                  Reset All Progress
+                </button>
+                
+                <button
+                  onClick={() => setGameState('menu')}
+                  className="w-full py-4 bg-white text-black font-bold rounded-sm hover:bg-zinc-200 transition-colors uppercase tracking-widest text-xs"
+                >
+                  Save & Back
+                </button>
               </div>
             </div>
           </motion.div>
@@ -246,6 +429,24 @@ export default function App() {
           </motion.div>
         )}
 
+        {gameState === 'garage' && (
+          <motion.div
+            key="garage"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="w-full flex items-center justify-center p-4"
+          >
+            <Garage 
+              carConfig={carConfig}
+              setCarConfig={setCarConfig}
+              money={money}
+              setMoney={setMoney}
+              onBack={() => setGameState('menu')}
+            />
+          </motion.div>
+        )}
+
         {gameState === 'playing' && (
           <motion.div
             key="playing"
@@ -256,6 +457,8 @@ export default function App() {
           >
             <RacingGame 
               level={level} 
+              trackTheme={trackTheme}
+              carConfig={carConfig}
               onRaceEnd={handleRaceEnd} 
               onBack={() => setGameState('menu')}
               isMultiplayer={isMultiplayer}
@@ -274,6 +477,7 @@ export default function App() {
             <div className="space-y-2">
               <h2 className="text-5xl font-black italic text-red-500 uppercase tracking-tighter">Race Failed</h2>
               <p className="text-zinc-500 font-mono">You finished in P{lastResult?.position}</p>
+              <p className="text-emerald-400 font-mono">Reward: +${lastResult?.reward}</p>
             </div>
             <p className="text-zinc-400 max-w-xs mx-auto">You must finish 1st to advance to the next street.</p>
             <div className="flex flex-col gap-3">
