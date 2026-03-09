@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { CAR_MODELS, CarModelType, CarConfig } from '../types';
 import { Zap, Gauge, Target, ChevronRight, ChevronLeft } from 'lucide-react';
 
@@ -8,14 +8,179 @@ interface CarSelectProps {
   currentModel: CarModelType;
 }
 
+const shadeColor = (color: string, percent: number) => {
+  let R = parseInt(color.substring(1, 3), 16);
+  let G = parseInt(color.substring(3, 5), 16);
+  let B = parseInt(color.substring(5, 7), 16);
+
+  R = Math.floor(R * (100 + percent) / 100);
+  G = Math.floor(G * (100 + percent) / 100);
+  B = Math.floor(B * (100 + percent) / 100);
+
+  R = (R < 255) ? R : 255;
+  G = (G < 255) ? G : 255;
+  B = (B < 255) ? B : 255;
+
+  const RR = ((R.toString(16).length === 1) ? "0" + R.toString(16) : R.toString(16));
+  const GG = ((G.toString(16).length === 1) ? "0" + G.toString(16) : G.toString(16));
+  const BB = ((B.toString(16).length === 1) ? "0" + B.toString(16) : B.toString(16));
+
+  return "#" + RR + GG + BB;
+};
+
+const drawCarIllustration = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, modelId: CarModelType) => {
+  const model = CAR_MODELS[modelId];
+  const colorMap: Record<CarModelType, string> = {
+    apex: '#10b981',
+    zenith: '#38bdf8',
+    fury: '#dc2626',
+    velocity: '#fbbf24',
+    phantom: '#7c3aed'
+  };
+  const color = colorMap[modelId];
+  const visuals = model.visuals;
+  
+  ctx.save();
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x, y, w * 0.6 * visuals.bodyWidth, h * 0.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Wheels
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.ellipse(x - w * 0.4 * visuals.bodyWidth, y - h * 0.15, w * 0.1, h * 0.15, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + w * 0.4 * visuals.bodyWidth, y - h * 0.15, w * 0.1, h * 0.15, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Spoiler
+  const spoilerY = y - h * visuals.bodyHeight - h * visuals.cabinHeight;
+  const spoilerW = w * visuals.bodyWidth * 1.1;
+  
+  if (visuals.spoilerType === 'wing') {
+    ctx.fillStyle = '#222';
+    ctx.fillRect(x - spoilerW / 2, spoilerY - 10, spoilerW, 6); // Wing
+    ctx.fillRect(x - spoilerW * 0.35, spoilerY - 10, 3, 10); // Left mount
+    ctx.fillRect(x + spoilerW * 0.35 - 3, spoilerY - 10, 3, 10); // Right mount
+  } else if (visuals.spoilerType === 'ducktail') {
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.moveTo(x - spoilerW / 2, spoilerY);
+    ctx.lineTo(x + spoilerW / 2, spoilerY);
+    ctx.lineTo(x + spoilerW / 2, spoilerY - 8);
+    ctx.lineTo(x - spoilerW / 2, spoilerY - 8);
+    ctx.fill();
+  } else if (visuals.spoilerType === 'integrated') {
+    ctx.fillStyle = shadeColor(color, -20);
+    ctx.beginPath();
+    ctx.moveTo(x - spoilerW / 2, spoilerY + 5);
+    ctx.lineTo(x + spoilerW / 2, spoilerY + 5);
+    ctx.lineTo(x + spoilerW * 0.45, spoilerY - 5);
+    ctx.lineTo(x - spoilerW * 0.45, spoilerY - 5);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Car Body - Lower
+  const gradient = ctx.createLinearGradient(x, y - h * visuals.bodyHeight, x, y);
+  gradient.addColorStop(0, color);
+  gradient.addColorStop(1, shadeColor(color, -30));
+  ctx.fillStyle = gradient;
+  
+  const bodyW = w * visuals.bodyWidth;
+  const bodyH = h * visuals.bodyHeight;
+  
+  ctx.beginPath();
+  ctx.moveTo(x - bodyW / 2, y - bodyH * 0.1);
+  ctx.bezierCurveTo(x - bodyW / 2, y - bodyH * 0.4, x - bodyW * 0.45, y - bodyH * 0.6, x - bodyW * 0.45, y - bodyH * 0.6);
+  ctx.lineTo(x + bodyW * 0.45, y - bodyH * 0.6);
+  ctx.bezierCurveTo(x + bodyW * 0.45, y - bodyH * 0.6, x + bodyW / 2, y - bodyH * 0.4, x + bodyW / 2, y - bodyH * 0.1);
+  ctx.closePath();
+  ctx.fill();
+
+  // Car Body - Upper (Cabin)
+  ctx.fillStyle = shadeColor(color, -10);
+  const cabinW = w * visuals.cabinWidth;
+  const cabinH = h * visuals.cabinHeight;
+  const cabinY = y - bodyH * 0.6;
+  
+  ctx.beginPath();
+  ctx.moveTo(x - cabinW / 2, cabinY);
+  ctx.bezierCurveTo(x - cabinW * 0.9, cabinY - cabinH * 0.5, x - cabinW * 0.8, cabinY - cabinH, x - cabinW * 0.8, cabinY - cabinH);
+  ctx.lineTo(x + cabinW * 0.8, cabinY - cabinH);
+  ctx.bezierCurveTo(x + cabinW * 0.8, cabinY - cabinH, x + cabinW * 0.9, cabinY - cabinH * 0.5, x + cabinW / 2, cabinY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Rear Window
+  ctx.fillStyle = '#1e293b';
+  ctx.beginPath();
+  ctx.moveTo(x - cabinW * 0.6, cabinY - cabinH + 5);
+  ctx.lineTo(x + cabinW * 0.6, cabinY - cabinH + 5);
+  ctx.lineTo(x + cabinW * 0.7, cabinY - 5);
+  ctx.lineTo(x - cabinW * 0.7, cabinY - 5);
+  ctx.closePath();
+  ctx.fill();
+
+  // Tail Lights
+  ctx.fillStyle = '#ef4444';
+  if (visuals.tailLightType === 'bar') {
+    ctx.beginPath();
+    ctx.roundRect(x - bodyW * 0.45, y - bodyH * 0.5, bodyW * 0.9, bodyH / 15, 2);
+    ctx.fill();
+  } else if (visuals.tailLightType === 'segments') {
+    ctx.beginPath();
+    ctx.roundRect(x - bodyW * 0.42, y - bodyH * 0.5, bodyW / 5, bodyH / 10, 2);
+    ctx.roundRect(x + bodyW * 0.42 - bodyW / 5, y - bodyH * 0.5, bodyW / 5, bodyH / 10, 2);
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.arc(x - bodyW * 0.35, y - bodyH * 0.45, bodyH / 8, 0, Math.PI * 2);
+    ctx.arc(x + bodyW * 0.35, y - bodyH * 0.45, bodyH / 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Exhausts
+  ctx.fillStyle = '#333';
+  if (visuals.exhaustType === 'triple') {
+    ctx.beginPath();
+    ctx.arc(x - 8, y - 5, 4, 0, Math.PI * 2);
+    ctx.arc(x, y - 5, 4, 0, Math.PI * 2);
+    ctx.arc(x + 8, y - 5, 4, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (visuals.exhaustType === 'dual') {
+    ctx.beginPath();
+    ctx.arc(x - bodyW * 0.3, y - 5, 5, 0, Math.PI * 2);
+    ctx.arc(x + bodyW * 0.3, y - 5, 5, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillRect(x - 10, y - 8, 20, 6);
+  }
+
+  ctx.restore();
+};
+
 export const CarSelect: React.FC<CarSelectProps> = ({ onSelect, currentModel }) => {
   const models = Object.values(CAR_MODELS);
   const [currentIndex, setCurrentIndex] = useState(models.findIndex(m => m.id === currentModel));
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const next = () => setCurrentIndex((prev) => (prev + 1) % models.length);
   const prev = () => setCurrentIndex((prev) => (prev - 1 + models.length) % models.length);
   
   const selectedModel = models[currentIndex];
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawCarIllustration(ctx, canvas.width / 2, canvas.height * 0.8, 300, 180, selectedModel.id);
+  }, [currentIndex, selectedModel.id]);
 
   const StatBar = ({ label, value, max, icon: Icon, color }: { label: string, value: number, max: number, icon: any, color: string }) => (
     <div className="space-y-1">
@@ -74,16 +239,17 @@ export const CarSelect: React.FC<CarSelectProps> = ({ onSelect, currentModel }) 
             animate={{ x: 0, opacity: 1, scale: 1 }}
             exit={{ x: -100, opacity: 0, scale: 0.8 }}
             transition={{ type: "spring", damping: 20 }}
-            className="relative z-0"
+            className="relative z-0 w-full h-full flex items-center justify-center"
           >
-            {/* We can't easily render the 3D car here without the full RacingGame logic, 
-                so we'll use a stylized icon or text for now, or just a placeholder image */}
-            <div className="text-center">
-               <div className="text-8xl mb-4 opacity-20 font-black italic uppercase tracking-tighter text-white select-none">
+            <canvas 
+              ref={canvasRef} 
+              width={500} 
+              height={300} 
+              className="w-full h-auto max-w-[400px]"
+            />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+               <div className="text-9xl opacity-5 font-black italic uppercase tracking-tighter text-white select-none">
                  {selectedModel.name.split(' ')[0]}
-               </div>
-               <div className="absolute inset-0 flex items-center justify-center">
-                 <div className={`w-64 h-24 rounded-full blur-3xl opacity-20 bg-gradient-to-r from-cyan-500 to-purple-500`} />
                </div>
             </div>
           </motion.div>

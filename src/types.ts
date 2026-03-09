@@ -1,4 +1,4 @@
-export type CarModelType = 'speedster' | 'muscle' | 'tuner';
+export type CarModelType = 'apex' | 'zenith' | 'fury' | 'velocity' | 'phantom';
 
 export interface CarModel {
   id: CarModelType;
@@ -14,60 +14,106 @@ export interface CarModel {
     bodyHeight: number;
     cabinWidth: number;
     cabinHeight: number;
-    spoilerType: 'wing' | 'ducktail' | 'none';
+    spoilerType: 'wing' | 'ducktail' | 'none' | 'integrated';
+    exhaustType: 'triple' | 'dual' | 'center';
+    tailLightType: 'bar' | 'segments' | 'round';
   };
 }
 
 export const CAR_MODELS: Record<CarModelType, CarModel> = {
-  speedster: {
-    id: 'speedster',
-    name: 'Aero-X',
-    description: 'High top speed, but slower acceleration.',
+  apex: {
+    id: 'apex',
+    name: 'Apex Sian',
+    description: 'A masterpiece of green engineering. High speed and sharp handling.',
     baseStats: {
-      maxSpeed: 16000,
-      accel: 4500,
+      maxSpeed: 17000,
+      accel: 5000,
+      handling: 1.2,
+    },
+    visuals: {
+      bodyWidth: 1.2,
+      bodyHeight: 0.5,
+      cabinWidth: 0.6,
+      cabinHeight: 0.4,
+      spoilerType: 'integrated',
+      exhaustType: 'triple',
+      tailLightType: 'bar',
+    }
+  },
+  zenith: {
+    id: 'zenith',
+    name: 'Zenith Evija',
+    description: 'The future of electric hypercars. Extreme top speed, wide stance.',
+    baseStats: {
+      maxSpeed: 19000,
+      accel: 4000,
+      handling: 0.9,
+    },
+    visuals: {
+      bodyWidth: 1.3,
+      bodyHeight: 0.5,
+      cabinWidth: 0.7,
+      cabinHeight: 0.3,
+      spoilerType: 'none',
+      exhaustType: 'center',
+      tailLightType: 'segments',
+    }
+  },
+  fury: {
+    id: 'fury',
+    name: 'Fury NSX',
+    description: 'Precision balanced for the ultimate driving experience.',
+    baseStats: {
+      maxSpeed: 15500,
+      accel: 5500,
+      handling: 1.1,
+    },
+    visuals: {
+      bodyWidth: 1.1,
+      bodyHeight: 0.6,
+      cabinWidth: 0.7,
+      cabinHeight: 0.4,
+      spoilerType: 'integrated',
+      exhaustType: 'dual',
+      tailLightType: 'bar',
+    }
+  },
+  velocity: {
+    id: 'velocity',
+    name: 'Velocity Senna',
+    description: 'Track-focused performance with massive downforce.',
+    baseStats: {
+      maxSpeed: 16500,
+      accel: 6500,
+      handling: 1.4,
+    },
+    visuals: {
+      bodyWidth: 1.1,
+      bodyHeight: 0.5,
+      cabinWidth: 0.6,
+      cabinHeight: 0.5,
+      spoilerType: 'wing',
+      exhaustType: 'triple',
+      tailLightType: 'segments',
+    }
+  },
+  phantom: {
+    id: 'phantom',
+    name: 'Phantom i8',
+    description: 'A hybrid ghost on the asphalt. Incredible acceleration.',
+    baseStats: {
+      maxSpeed: 14500,
+      accel: 7500,
       handling: 1.0,
     },
     visuals: {
       bodyWidth: 1.0,
       bodyHeight: 0.6,
-      cabinWidth: 0.7,
-      cabinHeight: 0.4,
-      spoilerType: 'wing',
-    }
-  },
-  muscle: {
-    id: 'muscle',
-    name: 'V8 Crusher',
-    description: 'Incredible acceleration, lower top speed.',
-    baseStats: {
-      maxSpeed: 14000,
-      accel: 6000,
-      handling: 0.8,
-    },
-    visuals: {
-      bodyWidth: 1.1,
-      bodyHeight: 0.7,
-      cabinWidth: 0.8,
-      cabinHeight: 0.3,
-      spoilerType: 'ducktail',
-    }
-  },
-  tuner: {
-    id: 'tuner',
-    name: 'Drift King',
-    description: 'Superior handling and balanced stats.',
-    baseStats: {
-      maxSpeed: 15000,
-      accel: 5000,
-      handling: 1.3,
-    },
-    visuals: {
-      bodyWidth: 0.9,
-      bodyHeight: 0.6,
       cabinWidth: 0.6,
       cabinHeight: 0.5,
-      spoilerType: 'wing',
+      spoilerType: 'integrated',
+      exhaustType: 'dual',
+      tailLightType: 'segments',
     }
   }
 };

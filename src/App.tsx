@@ -69,8 +69,8 @@ export default function App() {
   const [carConfig, setCarConfig] = useState<CarConfig>(() => {
     const saved = localStorage.getItem('racing_car_config');
     return saved ? JSON.parse(saved) : {
-      model: 'speedster',
-      color: '#4ade80',
+      model: 'apex',
+      color: '#10b981',
       spoiler: 'large',
       rims: '#ffffff',
       decal: 'none',
