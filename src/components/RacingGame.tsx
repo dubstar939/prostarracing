@@ -16,6 +16,7 @@ interface RacingGameProps {
   roomId?: string;
   trackTheme?: TrackThemeType;
   carConfig: CarConfig;
+  carSprites?: Record<string, string>;
 }
 
 // Pseudo-3D Road Constants
@@ -79,7 +80,7 @@ const THEMES = {
   }
 };
 
-export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack, isMultiplayer, roomId, trackTheme = 'city', carConfig }) => {
+export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack, isMultiplayer, roomId, trackTheme = 'city', carConfig, carSprites }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [isLocalReady, setIsLocalReady] = useState(false);
@@ -259,7 +260,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       lap: 1,
       color: ['#ef4444', '#3b82f6', '#facc15', '#a855f7', '#ec4899', '#f97316', '#06b6d4', '#8b5cf6'][Math.floor(Math.random() * 8)],
       plate: generatePlate(),
-      model: (['apex', 'zenith', 'fury', 'velocity', 'phantom'] as CarModelType[])[Math.floor(Math.random() * 5)]
+      model: (['speedster', 'muscle', 'tuner'] as CarModelType[])[Math.floor(Math.random() * 3)]
     }));
 
     // Input
@@ -994,7 +995,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
               const screenH = screenW * 0.6;
               
               const opponentConfig: CarConfig = {
-                model: player.carConfig.model || 'apex',
+                model: player.carConfig.model || 'speedster',
                 color: player.carConfig.color,
                 spoiler: player.carConfig.spoiler || 'large',
                 rims: '#fff',
@@ -1246,9 +1247,24 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     }
   };
 
+  const spriteImagesRef = useRef<Record<string, HTMLImageElement>>({});
+
+  useEffect(() => {
+    if (carSprites) {
+      Object.entries(carSprites).forEach(([id, url]) => {
+        const spriteUrl = url as string;
+        if (!spriteImagesRef.current[id] || spriteImagesRef.current[id].src !== spriteUrl) {
+          const img = new Image();
+          img.src = spriteUrl;
+          spriteImagesRef.current[id] = img;
+        }
+      });
+    }
+  }, [carSprites]);
+
   const drawCar = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig, isBraking: boolean, damage: number = 0, driftAngle: number = 0, plate: string = "") => {
     const model = CAR_MODELS[config.model];
-    const color = config.color;
+    const color = config.color || model.color;
     const visuals = model.visuals;
     
     ctx.save();
@@ -1265,6 +1281,25 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     ctx.beginPath();
     ctx.ellipse(x, y, w * 0.6 * visuals.bodyWidth, h * 0.2, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // Sprite Rendering
+    const spriteImg = spriteImagesRef.current[config.model];
+    if (spriteImg && spriteImg.complete) {
+      ctx.drawImage(spriteImg, x - w / 2, y - h, w, h);
+      
+      // Add plate if needed
+      if (plate) {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x - 12, y - h * 0.1, 24, 10);
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 7px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(plate, x, y - h * 0.1 + 8);
+      }
+      
+      ctx.restore();
+      return;
+    }
 
     // Smoke if damaged
     if (damage > 50) {
@@ -1284,31 +1319,24 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     ctx.fill();
 
     // Spoiler
-    const spoilerY = y - h * visuals.bodyHeight - h * visuals.cabinHeight;
-    const spoilerW = w * visuals.bodyWidth * (config.spoiler === 'large' ? 1.1 : 0.9);
-    
-    if (visuals.spoilerType === 'wing' || (config.spoiler !== 'none' && visuals.spoilerType !== 'integrated')) {
+    if (config.spoiler !== 'none') {
       ctx.fillStyle = '#222';
-      ctx.fillRect(x - spoilerW / 2, spoilerY - 10, spoilerW, 6); // Wing
-      ctx.fillRect(x - spoilerW * 0.35, spoilerY - 10, 3, 10); // Left mount
-      ctx.fillRect(x + spoilerW * 0.35 - 3, spoilerY - 10, 3, 10); // Right mount
-    } else if (visuals.spoilerType === 'ducktail') {
-      ctx.fillStyle = '#222';
-      ctx.beginPath();
-      ctx.moveTo(x - spoilerW / 2, spoilerY);
-      ctx.lineTo(x + spoilerW / 2, spoilerY);
-      ctx.lineTo(x + spoilerW / 2, spoilerY - 8);
-      ctx.lineTo(x - spoilerW / 2, spoilerY - 8);
-      ctx.fill();
-    } else if (visuals.spoilerType === 'integrated') {
-      ctx.fillStyle = shadeColor(color, -20);
-      ctx.beginPath();
-      ctx.moveTo(x - spoilerW / 2, spoilerY + 5);
-      ctx.lineTo(x + spoilerW / 2, spoilerY + 5);
-      ctx.lineTo(x + spoilerW * 0.45, spoilerY - 5);
-      ctx.lineTo(x - spoilerW * 0.45, spoilerY - 5);
-      ctx.closePath();
-      ctx.fill();
+      const spoilerY = y - h * visuals.bodyHeight - h * visuals.cabinHeight;
+      const spoilerW = w * visuals.bodyWidth * (config.spoiler === 'large' ? 1.1 : 0.9);
+      
+      if (visuals.spoilerType === 'wing') {
+        ctx.fillRect(x - spoilerW / 2, spoilerY - 10, spoilerW, 6); // Wing
+        ctx.fillRect(x - spoilerW * 0.35, spoilerY - 10, 3, 10); // Left mount
+        ctx.fillRect(x + spoilerW * 0.35 - 3, spoilerY - 10, 3, 10); // Right mount
+      } else {
+        // Ducktail
+        ctx.beginPath();
+        ctx.moveTo(x - spoilerW / 2, spoilerY);
+        ctx.lineTo(x + spoilerW / 2, spoilerY);
+        ctx.lineTo(x + spoilerW / 2, spoilerY - 8);
+        ctx.lineTo(x - spoilerW / 2, spoilerY - 8);
+        ctx.fill();
+      }
     }
 
     // Car Body - Lower
@@ -1356,40 +1384,11 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     ctx.fillStyle = isBraking ? '#ff0000' : '#ef4444';
     ctx.shadowBlur = isBraking ? 15 : 5;
     ctx.shadowColor = '#ef4444';
-    
-    if (visuals.tailLightType === 'bar') {
-      ctx.beginPath();
-      ctx.roundRect(x - bodyW * 0.45, y - bodyH * 0.5, bodyW * 0.9, bodyH / 15, 2);
-      ctx.fill();
-    } else if (visuals.tailLightType === 'segments') {
-      ctx.beginPath();
-      ctx.roundRect(x - bodyW * 0.42, y - bodyH * 0.5, bodyW / 5, bodyH / 10, 2);
-      ctx.roundRect(x + bodyW * 0.42 - bodyW / 5, y - bodyH * 0.5, bodyW / 5, bodyH / 10, 2);
-      ctx.fill();
-    } else {
-      ctx.beginPath();
-      ctx.arc(x - bodyW * 0.35, y - bodyH * 0.45, bodyH / 8, 0, Math.PI * 2);
-      ctx.arc(x + bodyW * 0.35, y - bodyH * 0.45, bodyH / 8, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    ctx.beginPath();
+    ctx.roundRect(x - bodyW * 0.42, y - bodyH * 0.5, bodyW / 5, bodyH / 10, 2);
+    ctx.roundRect(x + bodyW * 0.42 - bodyW / 5, y - bodyH * 0.5, bodyW / 5, bodyH / 10, 2);
+    ctx.fill();
     ctx.shadowBlur = 0;
-
-    // Exhausts
-    ctx.fillStyle = '#333';
-    if (visuals.exhaustType === 'triple') {
-      ctx.beginPath();
-      ctx.arc(x - 8, y - 5, 4, 0, Math.PI * 2);
-      ctx.arc(x, y - 5, 4, 0, Math.PI * 2);
-      ctx.arc(x + 8, y - 5, 4, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (visuals.exhaustType === 'dual') {
-      ctx.beginPath();
-      ctx.arc(x - bodyW * 0.3, y - 5, 5, 0, Math.PI * 2);
-      ctx.arc(x + bodyW * 0.3, y - 5, 5, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.fillRect(x - 10, y - 8, 20, 6);
-    }
 
     // License Plate
     if (plate) {

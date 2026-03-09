@@ -11,7 +11,7 @@ import { Trophy, Flag, Settings, Play, Info, Users, Globe, Loader2, Map, Shoppin
 import { motion, AnimatePresence } from 'motion/react';
 import { socketService } from './services/socketService';
 import { GoogleGenAI } from '@google/genai';
-import { CarConfig, CAR_MODELS } from './types';
+import { CarConfig, CAR_MODELS, CarModelType } from './types';
 
 function useCoverImage() {
   const [coverImage, setCoverImage] = useState<string | null>(localStorage.getItem('coverImage'));
@@ -56,6 +56,56 @@ function useCoverImage() {
   return coverImage;
 }
 
+function useCarSprites() {
+  const [sprites, setSprites] = useState<Record<string, string>>(() => {
+    const saved = localStorage.getItem('racing_car_sprites');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  useEffect(() => {
+    const models = Object.keys(CAR_MODELS);
+    const missingModels = models.filter(m => !sprites[m]);
+
+    if (missingModels.length === 0) return;
+
+    const generateSprites = async () => {
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const newSprites = { ...sprites };
+
+        for (const modelId of missingModels) {
+          const model = CAR_MODELS[modelId as CarModelType];
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: `Rear view of a ${model.name} arcade racing car, 16-bit pixel art style, arcade racing game asset, flat background, symmetrical, high detail, retro aesthetic, ${model.color} color`,
+            config: {
+              imageConfig: {
+                aspectRatio: "1:1"
+              }
+            }
+          });
+
+          for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+              newSprites[modelId] = `data:image/png;base64,${part.inlineData.data}`;
+              break;
+            }
+          }
+        }
+
+        setSprites(newSprites);
+        localStorage.setItem('racing_car_sprites', JSON.stringify(newSprites));
+      } catch (error) {
+        console.error("Error generating car sprites:", error);
+      }
+    };
+
+    generateSprites();
+  }, [sprites]);
+
+  return sprites;
+}
+
 export default function App() {
   const [gameState, setGameState] = useState<'title' | 'car-select' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'garage' | 'options' | 'mode-select'>('title');
   const [level, setLevel] = useState(() => {
@@ -69,8 +119,8 @@ export default function App() {
   const [carConfig, setCarConfig] = useState<CarConfig>(() => {
     const saved = localStorage.getItem('racing_car_config');
     return saved ? JSON.parse(saved) : {
-      model: 'apex',
-      color: '#10b981',
+      model: 'speedster',
+      color: '#4ade80',
       spoiler: 'large',
       rims: '#ffffff',
       decal: 'none',
@@ -96,6 +146,7 @@ export default function App() {
   const [roomId, setRoomId] = useState('');
   const [trackTheme, setTrackTheme] = useState<TrackThemeType>('city');
   const coverImage = useCoverImage();
+  const carSprites = useCarSprites();
 
   const startGame = () => {
     setIsMultiplayer(false);
@@ -210,6 +261,7 @@ export default function App() {
           >
             <CarSelect 
               currentModel={carConfig.model}
+              carSprites={carSprites}
               onSelect={(model) => {
                 setCarConfig(prev => ({ ...prev, model }));
                 setGameState('menu');
@@ -461,6 +513,7 @@ export default function App() {
               setCarConfig={setCarConfig}
               money={money}
               setMoney={setMoney}
+              carSprites={carSprites}
               onBack={() => setGameState('menu')}
             />
           </motion.div>
@@ -478,6 +531,7 @@ export default function App() {
               level={level} 
               trackTheme={trackTheme}
               carConfig={carConfig}
+              carSprites={carSprites}
               onRaceEnd={handleRaceEnd} 
               onBack={() => setGameState('menu')}
               isMultiplayer={isMultiplayer}

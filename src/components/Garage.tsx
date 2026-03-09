@@ -9,9 +9,10 @@ interface GarageProps {
   money: number;
   setMoney: React.Dispatch<React.SetStateAction<number>>;
   onBack: () => void;
+  carSprites?: Record<string, string>;
 }
 
-export const Garage: React.FC<GarageProps> = ({ carConfig, setCarConfig, money, setMoney, onBack }) => {
+export const Garage: React.FC<GarageProps> = ({ carConfig, setCarConfig, money, setMoney, onBack, carSprites }) => {
   const currentModel = CAR_MODELS[carConfig.model];
 
   const handleUpgrade = (type: 'engine' | 'tires' | 'turbo') => {
@@ -81,6 +82,18 @@ export const Garage: React.FC<GarageProps> = ({ carConfig, setCarConfig, money, 
                   <span className="font-black italic uppercase text-lg">{model.name}</span>
                   {carConfig.model === model.id && <Check className="w-4 h-4 text-cyan-400" />}
                 </div>
+                
+                {carSprites?.[model.id] && (
+                  <div className="h-20 flex items-center justify-center overflow-hidden">
+                    <img 
+                      src={carSprites[model.id]} 
+                      alt={model.name} 
+                      className="h-full object-contain drop-shadow-[0_5px_15px_rgba(0,0,0,0.5)]"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                )}
+                
                 <p className="text-[10px] text-zinc-500 leading-tight uppercase">{model.description}</p>
                 
                 <div className="pt-2 space-y-1">
