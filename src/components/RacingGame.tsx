@@ -1263,7 +1263,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
   }, [carSprites]);
 
   const drawCar = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig, isBraking: boolean, damage: number = 0, driftAngle: number = 0, plate: string = "") => {
-    const model = CAR_MODELS[config.model];
+    const model = CAR_MODELS[config.model] || Object.values(CAR_MODELS)[0];
     const color = config.color || model.color;
     const visuals = model.visuals;
     

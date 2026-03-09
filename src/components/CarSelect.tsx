@@ -11,12 +11,13 @@ interface CarSelectProps {
 
 export const CarSelect: React.FC<CarSelectProps> = ({ onSelect, currentModel, carSprites }) => {
   const models = Object.values(CAR_MODELS);
-  const [currentIndex, setCurrentIndex] = useState(models.findIndex(m => m.id === currentModel));
+  const initialIndex = models.findIndex(m => m.id === currentModel);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
   
   const next = () => setCurrentIndex((prev) => (prev + 1) % models.length);
   const prev = () => setCurrentIndex((prev) => (prev - 1 + models.length) % models.length);
   
-  const selectedModel = models[currentIndex];
+  const selectedModel = models[currentIndex] || models[0];
 
   const StatBar = ({ label, value, max, icon: Icon, color }: { label: string, value: number, max: number, icon: any, color: string }) => (
     <div className="space-y-1">

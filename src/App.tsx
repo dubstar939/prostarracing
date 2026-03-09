@@ -72,31 +72,45 @@ function useCarSprites() {
       try {
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         const newSprites = { ...sprites };
+        
+        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
         for (const modelId of missingModels) {
-          const model = CAR_MODELS[modelId as CarModelType];
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
-            contents: `Rear view of a ${model.name} arcade racing car, 16-bit pixel art style, arcade racing game asset, flat background, symmetrical, high detail, retro aesthetic, ${model.color} color`,
-            config: {
-              imageConfig: {
-                aspectRatio: "1:1"
+          try {
+            const model = CAR_MODELS[modelId as CarModelType];
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash-image',
+              contents: `Rear view of a ${model.name} arcade racing car, 16-bit pixel art style, arcade racing game asset, flat background, symmetrical, high detail, retro aesthetic, ${model.color} color`,
+              config: {
+                imageConfig: {
+                  aspectRatio: "1:1"
+                }
+              }
+            });
+
+            for (const part of response.candidates?.[0]?.content?.parts || []) {
+              if (part.inlineData) {
+                newSprites[modelId] = `data:image/png;base64,${part.inlineData.data}`;
+                break;
               }
             }
-          });
-
-          for (const part of response.candidates?.[0]?.content?.parts || []) {
-            if (part.inlineData) {
-              newSprites[modelId] = `data:image/png;base64,${part.inlineData.data}`;
-              break;
+            
+            // Save incrementally to avoid losing progress on quota error
+            setSprites({ ...newSprites });
+            localStorage.setItem('racing_car_sprites', JSON.stringify(newSprites));
+            
+            // Add a significant delay between image generations to stay within free tier limits
+            await sleep(2000); 
+          } catch (err: any) {
+            console.warn(`Failed to generate sprite for ${modelId}:`, err.message);
+            if (err.message?.includes('429')) {
+              console.log("Rate limit hit, stopping generation for now.");
+              break; // Stop trying for this batch if we hit a rate limit
             }
           }
         }
-
-        setSprites(newSprites);
-        localStorage.setItem('racing_car_sprites', JSON.stringify(newSprites));
       } catch (error) {
-        console.error("Error generating car sprites:", error);
+        console.error("Error in generateSprites:", error);
       }
     };
 

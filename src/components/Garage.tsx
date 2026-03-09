@@ -13,7 +13,7 @@ interface GarageProps {
 }
 
 export const Garage: React.FC<GarageProps> = ({ carConfig, setCarConfig, money, setMoney, onBack, carSprites }) => {
-  const currentModel = CAR_MODELS[carConfig.model];
+  const currentModel = CAR_MODELS[carConfig.model] || Object.values(CAR_MODELS)[0];
 
   const handleUpgrade = (type: 'engine' | 'tires' | 'turbo') => {
     const currentLevel = carConfig[type];
