@@ -4,19 +4,20 @@ import { audioManager } from '../services/audioService';
 import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Zap, Monitor } from 'lucide-react';
 
 import { socketService } from '../services/socketService';
-import { CarConfig, CAR_MODELS, CarModelType } from '../types';
+import { CarConfig, CAR_MODELS, CarModelType, RaceMode } from '../types';
 
 export type TrackThemeType = 'city' | 'desert' | 'mountain';
 
 interface RacingGameProps {
   level: number;
-  onRaceEnd: (position: number, time: number) => void;
+  onRaceEnd: (position: number, time: number, score?: number) => void;
   onBack: () => void;
   isMultiplayer?: boolean;
   roomId?: string;
   trackTheme?: TrackThemeType;
   carConfig: CarConfig;
   carSprites?: Record<string, string>;
+  mode?: RaceMode;
 }
 
 // Pseudo-3D Road Constants
@@ -80,7 +81,7 @@ const THEMES = {
   }
 };
 
-export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack, isMultiplayer, roomId, trackTheme = 'city', carConfig, carSprites }) => {
+export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack, isMultiplayer, roomId, trackTheme = 'city', carConfig, carSprites, mode = 'classic' }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [isLocalReady, setIsLocalReady] = useState(false);
@@ -103,7 +104,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     turbo: 100,
     damage: 0,
     slipstream: false,
-    leaderboard: [] as any[]
+    leaderboard: [] as any[],
+    driftScore: 0,
+    eliminationTimer: 30,
+    targetTime: 60 + level * 10
   });
   const [isMuted, setIsMuted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -470,12 +474,51 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       }
 
       // Checkpoint Timer Update
-      checkpointTime -= dt;
-      if (checkpointTime <= 0) {
-        checkpointTime = 0;
-        // Penalties for running out of time
-        speed = Math.max(0, speed - 5000 * dt);
-        damage = Math.min(100, damage + 5 * dt);
+      if (mode === 'classic') {
+        checkpointTime -= dt;
+        if (checkpointTime <= 0) {
+          checkpointTime = 0;
+          // Penalties for running out of time
+          speed = Math.max(0, speed - 5000 * dt);
+          damage = Math.min(100, damage + 5 * dt);
+        }
+      }
+
+      // Trigger Smoke & Drift Mechanic
+      const isBraking = keysRef.current['ArrowDown'] || keysRef.current['KeyS'];
+      const isSteering = keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] || keysRef.current['ArrowRight'] || keysRef.current['KeyD'];
+      const isDrifting = isBraking && isSteering && speed > maxSpeed * 0.2;
+
+      // Elimination Mode Logic
+      if (mode === 'elimination' && !finished) {
+        hud.eliminationTimer -= dt;
+        if (hud.eliminationTimer <= 0) {
+          hud.eliminationTimer = 30;
+          // Eliminate the last racer
+          const allRacers = [
+            { name: 'You', distance: (lap - 1) * trackLength + position, isPlayer: true },
+            ...opponents.map(o => ({ name: o.name, distance: (o.lap - 1) * trackLength + o.z, isPlayer: false }))
+          ];
+          allRacers.sort((a, b) => a.distance - b.distance);
+          const eliminated = allRacers[0];
+          
+          if (eliminated.isPlayer) {
+            finished = true;
+            onRaceEnd(allRacers.length, Date.now() - startTime);
+          } else {
+            opponents = opponents.filter(o => o.name !== eliminated.name);
+            if (opponents.length === 0) {
+              finished = true;
+              onRaceEnd(1, Date.now() - startTime);
+            }
+          }
+        }
+      }
+
+      // Drift Mode Logic
+      if (mode === 'drift' && isDrifting) {
+        const driftPoints = Math.floor(Math.abs(driftAngle) * (speed / 100) * dt * 10);
+        hud.driftScore += driftPoints;
       }
 
       // Weather Updates
@@ -518,11 +561,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         p.opacity = p.life * 0.5;
         if (p.life <= 0) slipstreamParticles.splice(i, 1);
       }
-
-      // Trigger Smoke & Drift Mechanic
-      const isBraking = keysRef.current['ArrowDown'] || keysRef.current['KeyS'];
-      const isSteering = keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] || keysRef.current['ArrowRight'] || keysRef.current['KeyD'];
-      const isDrifting = isBraking && isSteering && speed > maxSpeed * 0.2;
 
       // Visual Drift Angle
       const targetDriftAngle = isDrifting ? (keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] ? -0.4 : 0.4) : 0;
@@ -585,7 +623,15 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         if (lap > totalLaps) {
           finished = true;
           const pos = opponents.filter(o => o.z > position).length + 1;
-          onRaceEnd(pos, Date.now() - startTime);
+          
+          if (mode === 'time-trial') {
+            const success = (Date.now() - startTime) / 1000 <= hud.targetTime;
+            onRaceEnd(success ? 1 : 8, Date.now() - startTime);
+          } else if (mode === 'drift') {
+            onRaceEnd(1, Date.now() - startTime, hud.driftScore);
+          } else {
+            onRaceEnd(pos, Date.now() - startTime);
+          }
           return;
         }
       }
@@ -743,7 +789,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         turbo: turboMeter,
         damage: damage,
         slipstream: isSlipstreaming,
-        checkpointTime: checkpointTime
+        checkpointTime: checkpointTime,
+        driftScore: hud.driftScore,
+        eliminationTimer: hud.eliminationTimer
       }));
     };
 
@@ -1468,9 +1516,29 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
               </div>
               <div className="text-2xl font-black mt-2">Time: {hud.time.toFixed(2)}</div>
               
-              <div className={`text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] ${hud.checkpointTime < 10 ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
-                TIME: {Math.ceil(hud.checkpointTime)}s
-              </div>
+              {mode === 'classic' && (
+                <div className={`text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] ${hud.checkpointTime < 10 ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
+                  TIME: {Math.ceil(hud.checkpointTime)}s
+                </div>
+              )}
+
+              {mode === 'time-trial' && (
+                <div className={`text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] ${hud.time > hud.targetTime ? 'text-red-500' : 'text-cyan-400'}`}>
+                  TARGET: {hud.targetTime}s
+                </div>
+              )}
+
+              {mode === 'elimination' && (
+                <div className="text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] text-red-500 animate-pulse">
+                  ELIMINATION: {Math.ceil(hud.eliminationTimer)}s
+                </div>
+              )}
+
+              {mode === 'drift' && (
+                <div className="text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] text-purple-400">
+                  DRIFT SCORE: {hud.driftScore}
+                </div>
+              )}
               
               {isMultiplayer && roomId && (
                 <div className="mt-2 flex items-center gap-2">

@@ -7,11 +7,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { RacingGame, TrackThemeType } from './components/RacingGame';
 import { Garage } from './components/Garage';
 import { CarSelect } from './components/CarSelect';
-import { Trophy, Flag, Settings, Play, Info, Users, Globe, Loader2, Map, ShoppingBag, ChevronRight } from 'lucide-react';
+import { Trophy, Flag, Settings, Play, Info, Users, Globe, Loader2, Map, ShoppingBag, ChevronRight, Gauge, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { socketService } from './services/socketService';
 import { GoogleGenAI } from '@google/genai';
-import { CarConfig, CAR_MODELS, CarModelType } from './types';
+import { CarConfig, CAR_MODELS, CarModelType, RaceMode } from './types';
 
 function useCoverImage() {
   const [coverImage, setCoverImage] = useState<string | null>(localStorage.getItem('coverImage'));
@@ -58,7 +58,7 @@ function useCoverImage() {
 
 function useCarSprites() {
   const [sprites, setSprites] = useState<Record<string, string>>(() => {
-    const saved = localStorage.getItem('racing_car_sprites');
+    const saved = localStorage.getItem('racing_car_sprites_v2');
     return saved ? JSON.parse(saved) : {};
   });
 
@@ -78,9 +78,17 @@ function useCarSprites() {
         for (const modelId of missingModels) {
           try {
             const model = CAR_MODELS[modelId as CarModelType];
+            const prompt = modelId === 'speedster' 
+              ? `Rear view of a classic 1960s red muscle car with silver racing stripes, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic`
+              : modelId === 'muscle'
+              ? `Rear view of a classic silver muscle car, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic`
+              : modelId === 'tuner'
+              ? `Rear view of a modern blue supercar inspired by the Audi R8, sleek design, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic`
+              : `Rear view of a ${model.name} arcade racing car, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic, ${model.color} color`;
+
             const response = await ai.models.generateContent({
               model: 'gemini-2.5-flash-image',
-              contents: `Rear view of a ${model.name} arcade racing car, 16-bit pixel art style, arcade racing game asset, flat background, symmetrical, high detail, retro aesthetic, ${model.color} color`,
+              contents: prompt,
               config: {
                 imageConfig: {
                   aspectRatio: "1:1"
@@ -90,14 +98,43 @@ function useCarSprites() {
 
             for (const part of response.candidates?.[0]?.content?.parts || []) {
               if (part.inlineData) {
-                newSprites[modelId] = `data:image/png;base64,${part.inlineData.data}`;
+                const base64Data = part.inlineData.data;
+                const mimeType = part.inlineData.mimeType || 'image/png';
+                const dataUrl = `data:${mimeType};base64,${base64Data}`;
+                
+                // Process image to remove white background
+                const img = new Image();
+                img.src = dataUrl;
+                await new Promise((resolve) => { img.onload = resolve; });
+                
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = img.width;
+                tempCanvas.height = img.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                if (tempCtx) {
+                  tempCtx.drawImage(img, 0, 0);
+                  const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                  const data = imageData.data;
+                  for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    if (r > 240 && g > 240 && b > 240) {
+                      data[i + 3] = 0;
+                    }
+                  }
+                  tempCtx.putImageData(imageData, 0, 0);
+                  newSprites[modelId] = tempCanvas.toDataURL();
+                } else {
+                  newSprites[modelId] = dataUrl;
+                }
                 break;
               }
             }
             
             // Save incrementally to avoid losing progress on quota error
             setSprites({ ...newSprites });
-            localStorage.setItem('racing_car_sprites', JSON.stringify(newSprites));
+            localStorage.setItem('racing_car_sprites_v2', JSON.stringify(newSprites));
             
             // Add a significant delay between image generations to stay within free tier limits
             await sleep(2000); 
@@ -143,7 +180,8 @@ export default function App() {
       turbo: 1
     };
   });
-  const [lastResult, setLastResult] = useState<{ position: number; time: string; reward: number } | null>(null);
+  const [lastResult, setLastResult] = useState<{ position: number; time: string; reward: number; score?: number } | null>(null);
+  const [raceMode, setRaceMode] = useState<RaceMode>('classic');
 
   useEffect(() => {
     localStorage.setItem('racing_level', level.toString());
@@ -179,11 +217,17 @@ export default function App() {
     setGameState('playing');
   };
 
-  const handleRaceEnd = (position: number, time: number) => {
+  const handleRaceEnd = (position: number, time: number, score?: number) => {
     const timeStr = (time / 1000).toFixed(2) + 's';
-    const reward = Math.max(0, (10 - position) * 200 + (position === 1 ? 500 : 0));
+    let reward = Math.max(0, (10 - position) * 200 + (position === 1 ? 500 : 0));
+    
+    if (raceMode === 'drift' && score) {
+      reward += Math.floor(score / 10);
+    }
+
     setMoney(prev => prev + reward);
-    setLastResult({ position, time: timeStr, reward });
+    setLastResult({ position, time: timeStr, reward, score });
+    
     if (position === 1) {
       setGameState('level-complete');
     } else {
@@ -352,48 +396,49 @@ export default function App() {
               <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest">Choose your racing experience</p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 w-full">
-              <button
-                onClick={startGame}
-                className="group relative flex items-center justify-between bg-white text-black font-bold py-6 px-8 rounded-sm hover:bg-zinc-200 transition-all transform hover:skew-x-[-10deg] active:scale-95"
-              >
-                <div className="flex items-center gap-4">
-                  <Trophy className="w-6 h-6" />
-                  <div className="text-left">
-                    <div className="uppercase tracking-tight text-lg">Single Player</div>
-                    <div className="text-[10px] font-mono opacity-60">STREET {level} • PROGRESSION</div>
+            <div className="grid grid-cols-1 gap-3 w-full">
+              {[
+                { id: 'classic', name: 'Classic Race', desc: 'Standard street race with checkpoints.', icon: Trophy },
+                { id: 'time-trial', name: 'Time Trial', desc: 'Beat the target time on an empty track.', icon: Gauge },
+                { id: 'elimination', name: 'Elimination', desc: 'Last car is removed every 30 seconds.', icon: Flag },
+                { id: 'drift', name: 'Drift King', desc: 'Score points by drifting through corners.', icon: Zap },
+              ].map((mode) => (
+                <button
+                  key={mode.id}
+                  onClick={() => {
+                    setRaceMode(mode.id as RaceMode);
+                    startGame();
+                  }}
+                  className="group relative flex items-center justify-between bg-zinc-900 text-white font-bold py-4 px-6 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+                >
+                  <div className="flex items-center gap-4">
+                    <mode.icon className={`w-5 h-5 ${mode.id === 'drift' ? 'text-purple-400' : mode.id === 'elimination' ? 'text-red-500' : 'text-cyan-400'}`} />
+                    <div className="text-left">
+                      <div className="uppercase tracking-tight text-lg">{mode.name}</div>
+                      <div className="text-[10px] font-mono text-zinc-500">{mode.desc}</div>
+                    </div>
                   </div>
-                </div>
-                <ChevronRight className="w-5 h-5" />
-              </button>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              ))}
 
-              <button
-                onClick={startMultiplayer}
-                className="group relative flex items-center justify-between bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
-              >
-                <div className="flex items-center gap-4">
-                  <Users className="w-6 h-6 text-cyan-400" />
-                  <div className="text-left">
-                    <div className="uppercase tracking-tight text-lg">Multiplayer</div>
-                    <div className="text-[10px] font-mono text-zinc-500">ONLINE ROOMS • COMPETITIVE</div>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5" />
-              </button>
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <button
+                  onClick={startMultiplayer}
+                  className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-4 px-6 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+                >
+                  <Users className="w-5 h-5 text-cyan-400" />
+                  <span className="uppercase tracking-tight text-sm">Multiplayer</span>
+                </button>
 
-              <button
-                onClick={() => setGameState('garage')}
-                className="group relative flex items-center justify-between bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
-              >
-                <div className="flex items-center gap-4">
-                  <ShoppingBag className="w-6 h-6 text-emerald-400" />
-                  <div className="text-left">
-                    <div className="uppercase tracking-tight text-lg">Garage</div>
-                    <div className="text-[10px] font-mono text-zinc-500">CASH: ${money} • UPGRADES</div>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5" />
-              </button>
+                <button
+                  onClick={() => setGameState('garage')}
+                  className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-4 px-6 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+                >
+                  <ShoppingBag className="w-5 h-5 text-emerald-400" />
+                  <span className="uppercase tracking-tight text-sm">Garage</span>
+                </button>
+              </div>
 
               <button
                 onClick={() => setGameState('menu')}
@@ -546,6 +591,7 @@ export default function App() {
               trackTheme={trackTheme}
               carConfig={carConfig}
               carSprites={carSprites}
+              mode={raceMode}
               onRaceEnd={handleRaceEnd} 
               onBack={() => setGameState('menu')}
               isMultiplayer={isMultiplayer}
@@ -563,10 +609,14 @@ export default function App() {
           >
             <div className="space-y-2">
               <h2 className="text-5xl font-black italic text-red-500 uppercase tracking-tighter">Race Failed</h2>
-              <p className="text-zinc-500 font-mono">You finished in P{lastResult?.position}</p>
+              <p className="text-zinc-500 font-mono">
+                {raceMode === 'drift' ? `Drift Score: ${lastResult?.score}` : `You finished in P${lastResult?.position}`}
+              </p>
               <p className="text-emerald-400 font-mono">Reward: +${lastResult?.reward}</p>
             </div>
-            <p className="text-zinc-400 max-w-xs mx-auto">You must finish 1st to advance to the next street.</p>
+            <p className="text-zinc-400 max-w-xs mx-auto">
+              {raceMode === 'time-trial' ? 'You must beat the target time to advance.' : 'You must finish 1st to advance to the next street.'}
+            </p>
             <div className="flex flex-col gap-3">
               <button
                 onClick={retryLevel}
@@ -594,7 +644,10 @@ export default function App() {
             <div className="space-y-2">
               <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
               <h2 className="text-5xl font-black italic text-emerald-500 uppercase tracking-tighter">Victory</h2>
-              <p className="text-zinc-500 font-mono">Time: {lastResult?.time}</p>
+              <p className="text-zinc-500 font-mono">
+                {raceMode === 'drift' ? `Drift Score: ${lastResult?.score}` : `Time: ${lastResult?.time}`}
+              </p>
+              {raceMode === 'drift' && <p className="text-emerald-400 font-mono">Reward: +${lastResult?.reward}</p>}
             </div>
             <div className="flex flex-col gap-3">
               <button

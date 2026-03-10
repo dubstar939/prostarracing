@@ -22,34 +22,34 @@ export interface CarModel {
 export const CAR_MODELS: Record<CarModelType, CarModel> = {
   speedster: {
     id: 'speedster',
-    name: 'Red Fury',
-    description: 'Classic red supercar with high top speed.',
+    name: 'Red Muscle',
+    description: 'Classic 1960s muscle car, red with silver racing stripes.',
     color: '#ef4444',
     baseStats: {
-      maxSpeed: 16500,
-      accel: 4800,
-      handling: 1.0,
+      maxSpeed: 16000,
+      accel: 6200,
+      handling: 0.8,
     },
     visuals: {
-      bodyWidth: 1.1,
-      bodyHeight: 0.55,
+      bodyWidth: 1.25,
+      bodyHeight: 0.6,
       cabinWidth: 0.7,
       cabinHeight: 0.35,
-      spoilerType: 'wing',
+      spoilerType: 'ducktail',
     }
   },
   muscle: {
     id: 'muscle',
-    name: 'Yellow Beast',
-    description: 'Aggressive yellow supercar with massive acceleration.',
-    color: '#facc15',
+    name: 'Silver Muscle',
+    description: 'Powerful silver muscle car with a classic silhouette.',
+    color: '#94a3b8',
     baseStats: {
-      maxSpeed: 14500,
-      accel: 6500,
-      handling: 0.85,
+      maxSpeed: 15500,
+      accel: 6800,
+      handling: 0.75,
     },
     visuals: {
-      bodyWidth: 1.2,
+      bodyWidth: 1.25,
       bodyHeight: 0.65,
       cabinWidth: 0.75,
       cabinHeight: 0.3,
@@ -58,18 +58,18 @@ export const CAR_MODELS: Record<CarModelType, CarModel> = {
   },
   tuner: {
     id: 'tuner',
-    name: 'Blue Storm',
-    description: 'Sleek blue supercar with superior handling.',
+    name: 'Blue Supercar',
+    description: 'Modern blue supercar inspired by the Audi R8.',
     color: '#3b82f6',
     baseStats: {
-      maxSpeed: 15500,
-      accel: 5200,
-      handling: 1.4,
+      maxSpeed: 18000,
+      accel: 5800,
+      handling: 1.35,
     },
     visuals: {
-      bodyWidth: 1.0,
-      bodyHeight: 0.55,
-      cabinWidth: 0.65,
+      bodyWidth: 1.15,
+      bodyHeight: 0.5,
+      cabinWidth: 0.6,
       cabinHeight: 0.45,
       spoilerType: 'wing',
     }
@@ -111,6 +111,8 @@ export const CAR_MODELS: Record<CarModelType, CarModel> = {
     }
   }
 };
+
+export type RaceMode = 'classic' | 'time-trial' | 'elimination' | 'drift';
 
 export interface CarConfig {
   model: CarModelType;
