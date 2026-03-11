@@ -84,6 +84,10 @@ function useCarSprites() {
               ? `Rear view of a classic silver muscle car, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic`
               : modelId === 'tuner'
               ? `Rear view of a modern blue supercar inspired by the Audi R8, sleek design, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic`
+              : modelId === 'hyper'
+              ? `Rear view of an aggressive purple hypercar with a massive wing, low profile, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic`
+              : modelId === 'gt'
+              ? `Rear view of a sturdy green GT racing car, wide body kit, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic`
               : `Rear view of a ${model.name} arcade racing car, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic, ${model.color} color`;
 
             const response = await ai.models.generateContent({

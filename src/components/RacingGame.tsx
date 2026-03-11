@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { audioManager } from '../services/audioService';
-import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Zap, Monitor } from 'lucide-react';
+import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Zap, Monitor, Gauge } from 'lucide-react';
 
 import { socketService } from '../services/socketService';
 import { CarConfig, CAR_MODELS, CarModelType, RaceMode } from '../types';
@@ -104,6 +104,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     turbo: 100,
     damage: 0,
     slipstream: false,
+    isDrifting: false,
     leaderboard: [] as any[],
     driftScore: 0,
     eliminationTimer: 30,
@@ -232,6 +233,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     let playerZ = CAMERA_HEIGHT * CAMERA_DEPTH;
     let lap = 1;
     let driftAngle = 0;
+    let lateralVelocity = 0;
     const totalLaps = 2;
     
     const modelStats = CAR_MODELS[carConfig.model].baseStats;
@@ -639,9 +641,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       // Controls
       const handlingBoost = CAR_MODELS[carConfig.model].baseStats.handling;
       const grip = (((weather === 'rain' ? 0.7 : 1.0) * theme.grip) + (carConfig.tires - 1) * 0.1) * handlingBoost;
-      const slipstreamBoost = isSlipstreaming ? 1.2 : 1.0;
-      const driftFactor = isDrifting ? 2.8 : 1.0;
-      const driftSlowdown = isDrifting ? 0.975 : 1.0;
+      const slipstreamBoost = isSlipstreaming ? 1.25 : 1.0; // Slightly increased acceleration boost
+      const slipstreamMaxSpeedBoost = isSlipstreaming ? 1500 : 0; // New max speed bonus
+      const driftFactor = isDrifting ? 3.5 : 1.0; // Increased responsiveness during drift
+      const driftSlowdown = isDrifting ? 0.98 : 1.0; // Slightly less slowdown to maintain momentum
 
       if (keysRef.current['ArrowUp'] || keysRef.current['KeyW']) speed += accel * dt * grip * slipstreamBoost;
       else if (isBraking) speed += breaking * dt;
@@ -649,8 +652,21 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
 
       speed *= driftSlowdown;
 
-      if (keysRef.current['ArrowLeft'] || keysRef.current['KeyA']) playerX -= dt * (3 * driftFactor) * speedPercent * grip;
-      if (keysRef.current['ArrowRight'] || keysRef.current['KeyD']) playerX += dt * (3 * driftFactor) * speedPercent * grip;
+      // Lateral Movement Physics
+      const steerInput = (keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] ? -1 : 0) + (keysRef.current['ArrowRight'] || keysRef.current['KeyD'] ? 1 : 0);
+      
+      if (isDrifting) {
+        // During drift, steering adds to lateral velocity with inertia
+        lateralVelocity += steerInput * dt * 8 * speedPercent * grip;
+        // Friction is lower during drift
+        lateralVelocity *= 0.96; 
+      } else {
+        // Normal steering: more direct, high friction
+        const targetLateralVelocity = steerInput * 3 * speedPercent * grip;
+        lateralVelocity = lateralVelocity + (targetLateralVelocity - lateralVelocity) * 0.2;
+      }
+
+      playerX += lateralVelocity * dt * 1.5;
 
       // Off-road penalty
       if ((playerX < -1) || (playerX > 1)) {
@@ -665,11 +681,18 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       
       // Speed limits
       const damageFactor = 1 - (damage / 100) * 0.5; // Max 50% speed reduction
-      const currentMax = (turboActive ? TURBO_MAX_SPEED : maxSpeed) * damageFactor;
+      const currentMax = (turboActive ? TURBO_MAX_SPEED : (maxSpeed + slipstreamMaxSpeedBoost)) * damageFactor;
       speed = Math.max(0, Math.min(currentMax, speed));
 
       // Curve centrifugal force
-      playerX -= (dt * speedPercent * playerSegment.curve * 1.5);
+      const centrifugalForce = (dt * speedPercent * playerSegment.curve * 2.0);
+      if (isDrifting) {
+        // Drifting allows you to "lean" into the curve better or slide out more
+        playerX -= centrifugalForce * 0.5; 
+        lateralVelocity -= centrifugalForce * 0.5;
+      } else {
+        playerX -= centrifugalForce;
+      }
 
       // Update Opponents (Reactive AI)
       isSlipstreaming = false;
@@ -681,6 +704,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
 
         if (zDiff > 500 && zDiff < 4000 && Math.abs(otherX - playerX) < 0.35) {
           isSlipstreaming = true;
+          // Suction effect: pull player towards the slipstream center
+          playerX = playerX + (otherX - playerX) * 0.02;
+          
           // Add slipstream particles
           if (Math.random() > 0.4) {
             slipstreamParticles.push({
@@ -789,6 +815,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         turbo: turboMeter,
         damage: damage,
         slipstream: isSlipstreaming,
+        isDrifting: isDrifting,
         checkpointTime: checkpointTime,
         driftScore: hud.driftScore,
         eliminationTimer: hud.eliminationTimer
@@ -1538,6 +1565,28 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
                 <div className="text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] text-purple-400">
                   DRIFT SCORE: {hud.driftScore}
                 </div>
+              )}
+
+              {hud.slipstream && (
+                <motion.div 
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="mt-4 flex items-center gap-2 bg-cyan-500/20 border border-cyan-500/50 px-4 py-2 rounded-sm backdrop-blur-sm"
+                >
+                  <Zap className="w-5 h-5 text-cyan-400 animate-pulse" />
+                  <span className="text-xl font-black italic uppercase tracking-tighter text-cyan-400">Slipstream Boost</span>
+                </motion.div>
+              )}
+
+              {hud.isDrifting && (
+                <motion.div 
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="mt-2 flex items-center gap-2 bg-purple-500/20 border border-purple-500/50 px-4 py-2 rounded-sm backdrop-blur-sm"
+                >
+                  <Gauge className="w-5 h-5 text-purple-400 animate-pulse" />
+                  <span className="text-xl font-black italic uppercase tracking-tighter text-purple-400">Drifting</span>
+                </motion.div>
               )}
               
               {isMultiplayer && roomId && (

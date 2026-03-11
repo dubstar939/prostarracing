@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { ChevronLeft, Zap, Gauge, Settings, Palette, ArrowRight, Check, Lock } from 'lucide-react';
 import { CarConfig, CAR_MODELS, CarModelType, UPGRADE_COSTS } from '../types';
+import { Car3D } from './Car3D';
 
 interface GarageProps {
   carConfig: CarConfig;
@@ -64,6 +65,16 @@ export const Garage: React.FC<GarageProps> = ({ carConfig, setCarConfig, money, 
 
       {/* Main Content */}
       <div className="flex-1 p-8 overflow-y-auto space-y-12">
+        {/* Main 3D Preview */}
+        <div className="w-full aspect-video bg-zinc-900 rounded-sm border border-zinc-800 overflow-hidden relative group">
+          <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/5 to-transparent pointer-events-none" />
+          <Car3D config={carConfig} className="w-full h-full" />
+          <div className="absolute bottom-4 left-4 flex flex-col">
+            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Current Setup</span>
+            <span className="text-xl font-black italic uppercase text-white">{currentModel.name}</span>
+          </div>
+        </div>
+
         {/* Car Model Selection */}
         <section className="space-y-6">
           <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-500 border-b border-zinc-800 pb-2">Select Vehicle</h3>
@@ -83,16 +94,20 @@ export const Garage: React.FC<GarageProps> = ({ carConfig, setCarConfig, money, 
                   {carConfig.model === model.id && <Check className="w-4 h-4 text-cyan-400" />}
                 </div>
                 
-                {carSprites?.[model.id] && (
-                  <div className="h-20 flex items-center justify-center overflow-hidden">
-                    <img 
-                      src={carSprites[model.id]} 
-                      alt={model.name} 
-                      className="h-full object-contain drop-shadow-[0_5px_15px_rgba(0,0,0,0.5)]"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                )}
+                <div className="h-24 w-full flex items-center justify-center overflow-hidden">
+                  <Car3D 
+                    config={{
+                      model: model.id,
+                      color: model.color,
+                      spoiler: model.visuals.spoilerType === 'none' ? 'none' : 'small',
+                      rims: '#fff',
+                      decal: 'none',
+                      engine: 1, tires: 1, turbo: 1
+                    }} 
+                    autoRotate={false}
+                    className="w-full h-full"
+                  />
+                </div>
                 
                 <p className="text-[10px] text-zinc-500 leading-tight uppercase">{model.description}</p>
                 

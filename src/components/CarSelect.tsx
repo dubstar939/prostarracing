@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { CAR_MODELS, CarModelType, CarConfig } from '../types';
 import { Zap, Gauge, Target, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Car3D } from './Car3D';
 
 interface CarSelectProps {
   onSelect: (model: CarModelType) => void;
@@ -18,6 +19,18 @@ export const CarSelect: React.FC<CarSelectProps> = ({ onSelect, currentModel, ca
   const prev = () => setCurrentIndex((prev) => (prev - 1 + models.length) % models.length);
   
   const selectedModel = models[currentIndex] || models[0];
+
+  // Create a temporary config for the 3D preview
+  const previewConfig: CarConfig = {
+    model: selectedModel.id,
+    color: selectedModel.color,
+    spoiler: selectedModel.visuals.spoilerType === 'none' ? 'none' : 'small',
+    rims: '#fff',
+    decal: 'none',
+    engine: 1,
+    tires: 1,
+    turbo: 1
+  };
 
   const StatBar = ({ label, value, max, icon: Icon, color }: { label: string, value: number, max: number, icon: any, color: string }) => (
     <div className="space-y-1">
@@ -70,32 +83,16 @@ export const CarSelect: React.FC<CarSelectProps> = ({ onSelect, currentModel, ca
             <ChevronRight className="w-6 h-6" />
           </button>
 
-          <motion.div
-            key={selectedModel.id}
-            initial={{ x: 100, opacity: 0, scale: 0.8 }}
-            animate={{ x: 0, opacity: 1, scale: 1 }}
-            exit={{ x: -100, opacity: 0, scale: 0.8 }}
-            transition={{ type: "spring", damping: 20 }}
-            className="relative z-0 w-full h-full flex items-center justify-center"
-          >
-            {carSprites?.[selectedModel.id] ? (
-              <img 
-                src={carSprites[selectedModel.id]} 
-                alt={selectedModel.name}
-                className="w-64 h-64 object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <div className="text-center">
-                 <div className="text-8xl mb-4 opacity-20 font-black italic uppercase tracking-tighter text-white select-none">
-                   {selectedModel.name.split(' ')[0]}
-                 </div>
-                 <div className="absolute inset-0 flex items-center justify-center">
-                   <div className={`w-64 h-24 rounded-full blur-3xl opacity-20 bg-gradient-to-r from-cyan-500 to-purple-500`} />
-                 </div>
-              </div>
-            )}
-          </motion.div>
+            <motion.div
+              key={selectedModel.id}
+              initial={{ x: 100, opacity: 0, scale: 0.8 }}
+              animate={{ x: 0, opacity: 1, scale: 1 }}
+              exit={{ x: -100, opacity: 0, scale: 0.8 }}
+              transition={{ type: "spring", damping: 20 }}
+              className="relative z-0 w-full h-full flex items-center justify-center"
+            >
+              <Car3D config={previewConfig} className="w-full h-full" />
+            </motion.div>
 
           <div className="absolute bottom-6 left-6 right-6 flex justify-between items-end">
             <div className="space-y-1">
