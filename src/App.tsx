@@ -79,6 +79,7 @@ export default function App() {
   });
   const [lastResult, setLastResult] = useState<{ position: number; time: string; reward: number; score?: number } | null>(null);
   const [raceMode, setRaceMode] = useState<RaceMode>('classic');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('racing_level', level.toString());
@@ -137,12 +138,12 @@ export default function App() {
   };
 
   const resetProgress = () => {
-    if (confirm('Are you sure you want to reset all progress? This will clear your level and car upgrades.')) {
-      localStorage.removeItem('racing_level');
-      localStorage.removeItem('racing_car_config');
-      setLevel(1);
-      window.location.reload();
-    }
+    localStorage.removeItem('racing_level');
+    localStorage.removeItem('racing_car_config');
+    localStorage.removeItem('racing_money');
+    setLevel(1);
+    setMoney(0);
+    window.location.reload();
   };
 
   const retryLevel = () => {
@@ -368,7 +369,7 @@ export default function App() {
 
               <div className="pt-4 space-y-4">
                 <button 
-                  onClick={resetProgress}
+                  onClick={() => setShowResetConfirm(true)}
                   className="w-full py-4 bg-red-900/20 text-red-400 border border-red-900/50 rounded-sm font-bold uppercase tracking-widest text-xs hover:bg-red-900/40 transition-all"
                 >
                   Reset All Progress
@@ -515,6 +516,46 @@ export default function App() {
                 Back to Menu
               </button>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Reset Confirmation Modal */}
+      <AnimatePresence>
+        {showResetConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-zinc-900 border border-zinc-800 p-8 max-w-sm w-full space-y-6 text-center"
+            >
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black italic uppercase tracking-tighter text-red-500">Reset Progress?</h3>
+                <p className="text-zinc-400 text-sm font-mono uppercase tracking-tight">
+                  This will clear your level, money, and car upgrades. This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={resetProgress}
+                  className="bg-red-600 text-white font-bold py-4 rounded-sm hover:bg-red-500 transition-colors uppercase tracking-widest text-xs"
+                >
+                  Yes, Reset Everything
+                </button>
+                <button
+                  onClick={() => setShowResetConfirm(false)}
+                  className="bg-zinc-800 text-zinc-400 font-bold py-4 rounded-sm hover:bg-zinc-700 transition-colors uppercase tracking-widest text-xs"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
