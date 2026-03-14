@@ -5,8 +5,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { RacingGame, TrackThemeType } from './components/RacingGame';
-import { Garage } from './components/Garage';
-import { CarSelect } from './components/CarSelect';
 import { Trophy, Flag, Settings, Play, Info, Users, Globe, Loader2, Map, ShoppingBag, ChevronRight, Gauge, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { socketService } from './services/socketService';
@@ -57,7 +55,7 @@ function useCoverImage() {
 }
 
 export default function App() {
-  const [gameState, setGameState] = useState<'title' | 'car-select' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'garage' | 'options' | 'mode-select'>('title');
+  const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'options' | 'mode-select'>('title');
   const [level, setLevel] = useState(() => {
     const saved = localStorage.getItem('racing_level');
     return saved ? parseInt(saved, 10) : 1;
@@ -160,7 +158,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setGameState('car-select')}
+            onClick={() => setGameState('menu')}
             className="fixed inset-0 z-50 cursor-pointer bg-black flex flex-col items-center justify-center overflow-hidden"
           >
             {/* Title Image */}
@@ -207,23 +205,6 @@ export default function App() {
           </motion.div>
         )}
 
-        {gameState === 'car-select' && (
-          <motion.div
-            key="car-select"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="w-full"
-          >
-            <CarSelect 
-              currentModel={carConfig.model}
-              onSelect={(model) => {
-                setCarConfig(prev => ({ ...prev, model }));
-                setGameState('menu');
-              }}
-            />
-          </motion.div>
-        )}
 
         {gameState === 'menu' && (
           <motion.div
@@ -319,21 +300,13 @@ export default function App() {
                 </button>
               ))}
 
-              <div className="grid grid-cols-2 gap-3 mt-2">
+              <div className="flex items-center justify-center mt-2">
                 <button
-                  onClick={startMultiplayer}
-                  className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-4 px-6 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+                  onClick={() => setGameState('lobby')}
+                  className="w-full group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-4 px-6 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
                 >
                   <Users className="w-5 h-5 text-cyan-400" />
                   <span className="uppercase tracking-tight text-sm">Multiplayer</span>
-                </button>
-
-                <button
-                  onClick={() => setGameState('garage')}
-                  className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-4 px-6 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
-                >
-                  <ShoppingBag className="w-5 h-5 text-emerald-400" />
-                  <span className="uppercase tracking-tight text-sm">Garage</span>
                 </button>
               </div>
 
@@ -456,23 +429,6 @@ export default function App() {
           </motion.div>
         )}
 
-        {gameState === 'garage' && (
-          <motion.div
-            key="garage"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="w-full flex items-center justify-center p-4"
-          >
-            <Garage 
-              carConfig={carConfig}
-              setCarConfig={setCarConfig}
-              money={money}
-              setMoney={setMoney}
-              onBack={() => setGameState('menu')}
-            />
-          </motion.div>
-        )}
 
         {gameState === 'playing' && (
           <motion.div
@@ -486,6 +442,7 @@ export default function App() {
               level={level} 
               trackTheme={trackTheme}
               carConfig={carConfig}
+              setCarConfig={setCarConfig}
               mode={raceMode}
               onRaceEnd={handleRaceEnd} 
               onBack={() => setGameState('menu')}

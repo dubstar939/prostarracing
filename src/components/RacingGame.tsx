@@ -5,9 +5,17 @@ import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, Chev
 
 import { socketService } from '../services/socketService';
 
+import { CarConfig, RaceMode } from '../types';
+
+export type TrackThemeType = 'city' | 'desert' | 'mountain';
+
 interface RacingGameProps {
   level: number;
-  onRaceEnd: (position: number, time: number) => void;
+  trackTheme: TrackThemeType;
+  carConfig: CarConfig;
+  setCarConfig: React.Dispatch<React.SetStateAction<CarConfig>>;
+  mode: RaceMode;
+  onRaceEnd: (position: number, time: number, score?: number) => void;
   onBack: () => void;
   isMultiplayer?: boolean;
   roomId?: string;
@@ -40,7 +48,7 @@ interface Sprite {
   scale: number;
 }
 
-export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack, isMultiplayer, roomId }) => {
+export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carConfig, setCarConfig, mode, onRaceEnd, onBack, isMultiplayer, roomId }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [isLocalReady, setIsLocalReady] = useState(false);
@@ -48,15 +56,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
   const [otherPlayers, setOtherPlayers] = useState<{ [key: string]: any }>({});
   const otherPlayersRef = useRef<{ [key: string]: any }>({});
   const [weather, setWeather] = useState<'clear' | 'rain' | 'fog'>('clear');
-  const [carConfig, setCarConfig] = useState({
-    color: '#4ade80',
-    spoiler: 'large' as 'none' | 'small' | 'large',
-    rims: '#ffffff',
-    decal: 'none' as 'none' | 'stripes' | 'racing-number',
-    engine: 1,
-    tires: 1,
-    turbo: 1
-  });
 
   const [hud, setHud] = useState({
     speed: 0,
