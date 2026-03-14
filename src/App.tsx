@@ -56,111 +56,6 @@ function useCoverImage() {
   return coverImage;
 }
 
-function useCarSprites() {
-  const [sprites, setSprites] = useState<Record<string, string>>(() => {
-    const saved = localStorage.getItem('racing_car_sprites_v2');
-    return saved ? JSON.parse(saved) : {};
-  });
-
-  useEffect(() => {
-    const models = Object.keys(CAR_MODELS);
-    const missingModels = models.filter(m => !sprites[m]);
-
-    if (missingModels.length === 0) return;
-
-    const generateSprites = async () => {
-      try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const newSprites = { ...sprites };
-        
-        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-        for (const modelId of missingModels) {
-          try {
-            const model = CAR_MODELS[modelId as CarModelType];
-            const prompt = modelId === 'speedster' 
-              ? `Rear view of a classic 1960s red muscle car with silver racing stripes, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic`
-              : modelId === 'muscle'
-              ? `Rear view of a classic silver muscle car, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic`
-              : modelId === 'tuner'
-              ? `Rear view of a modern blue supercar inspired by the Audi R8, sleek design, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic`
-              : modelId === 'hyper'
-              ? `Rear view of an aggressive purple hypercar with a massive wing, low profile, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic`
-              : modelId === 'gt'
-              ? `Rear view of a sturdy green GT racing car, wide body kit, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic`
-              : `Rear view of a ${model.name} arcade racing car, 16-bit pixel art style, arcade racing game asset, pure white background, symmetrical, high detail, retro aesthetic, ${model.color} color`;
-
-            const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash-image',
-              contents: prompt,
-              config: {
-                imageConfig: {
-                  aspectRatio: "1:1"
-                }
-              }
-            });
-
-            for (const part of response.candidates?.[0]?.content?.parts || []) {
-              if (part.inlineData) {
-                const base64Data = part.inlineData.data;
-                const mimeType = part.inlineData.mimeType || 'image/png';
-                const dataUrl = `data:${mimeType};base64,${base64Data}`;
-                
-                // Process image to remove white background
-                const img = new Image();
-                img.src = dataUrl;
-                await new Promise((resolve) => { img.onload = resolve; });
-                
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = img.width;
-                tempCanvas.height = img.height;
-                const tempCtx = tempCanvas.getContext('2d');
-                if (tempCtx) {
-                  tempCtx.drawImage(img, 0, 0);
-                  const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-                  const data = imageData.data;
-                  for (let i = 0; i < data.length; i += 4) {
-                    const r = data[i];
-                    const g = data[i + 1];
-                    const b = data[i + 2];
-                    if (r > 240 && g > 240 && b > 240) {
-                      data[i + 3] = 0;
-                    }
-                  }
-                  tempCtx.putImageData(imageData, 0, 0);
-                  newSprites[modelId] = tempCanvas.toDataURL();
-                } else {
-                  newSprites[modelId] = dataUrl;
-                }
-                break;
-              }
-            }
-            
-            // Save incrementally to avoid losing progress on quota error
-            setSprites({ ...newSprites });
-            localStorage.setItem('racing_car_sprites_v2', JSON.stringify(newSprites));
-            
-            // Add a significant delay between image generations to stay within free tier limits
-            await sleep(2000); 
-          } catch (err: any) {
-            console.warn(`Failed to generate sprite for ${modelId}:`, err.message);
-            if (err.message?.includes('429')) {
-              console.log("Rate limit hit, stopping generation for now.");
-              break; // Stop trying for this batch if we hit a rate limit
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error in generateSprites:", error);
-      }
-    };
-
-    generateSprites();
-  }, [sprites]);
-
-  return sprites;
-}
-
 export default function App() {
   const [gameState, setGameState] = useState<'title' | 'car-select' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'garage' | 'options' | 'mode-select'>('title');
   const [level, setLevel] = useState(() => {
@@ -175,9 +70,9 @@ export default function App() {
     const saved = localStorage.getItem('racing_car_config');
     return saved ? JSON.parse(saved) : {
       model: 'speedster',
-      color: '#4ade80',
-      spoiler: 'large',
-      rims: '#ffffff',
+      color: '#ffffff',
+      spoiler: 'small',
+      rims: 'silver',
       decal: 'none',
       engine: 1,
       tires: 1,
@@ -202,7 +97,6 @@ export default function App() {
   const [roomId, setRoomId] = useState('');
   const [trackTheme, setTrackTheme] = useState<TrackThemeType>('city');
   const coverImage = useCoverImage();
-  const carSprites = useCarSprites();
 
   const startGame = () => {
     setIsMultiplayer(false);
@@ -323,7 +217,6 @@ export default function App() {
           >
             <CarSelect 
               currentModel={carConfig.model}
-              carSprites={carSprites}
               onSelect={(model) => {
                 setCarConfig(prev => ({ ...prev, model }));
                 setGameState('menu');
@@ -576,7 +469,6 @@ export default function App() {
               setCarConfig={setCarConfig}
               money={money}
               setMoney={setMoney}
-              carSprites={carSprites}
               onBack={() => setGameState('menu')}
             />
           </motion.div>
@@ -594,7 +486,6 @@ export default function App() {
               level={level} 
               trackTheme={trackTheme}
               carConfig={carConfig}
-              carSprites={carSprites}
               mode={raceMode}
               onRaceEnd={handleRaceEnd} 
               onBack={() => setGameState('menu')}

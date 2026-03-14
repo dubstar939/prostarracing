@@ -1,23 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { audioManager } from '../services/audioService';
-import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Zap, Monitor, Gauge } from 'lucide-react';
+import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Zap, Monitor } from 'lucide-react';
 
 import { socketService } from '../services/socketService';
-import { CarConfig, CAR_MODELS, CarModelType, RaceMode } from '../types';
-
-export type TrackThemeType = 'city' | 'desert' | 'mountain';
 
 interface RacingGameProps {
   level: number;
-  onRaceEnd: (position: number, time: number, score?: number) => void;
+  onRaceEnd: (position: number, time: number) => void;
   onBack: () => void;
   isMultiplayer?: boolean;
   roomId?: string;
-  trackTheme?: TrackThemeType;
-  carConfig: CarConfig;
-  carSprites?: Record<string, string>;
-  mode?: RaceMode;
 }
 
 // Pseudo-3D Road Constants
@@ -28,7 +21,7 @@ const RUMBLE_LENGTH = 3;
 const FIELD_OF_VIEW = 100;
 const CAMERA_HEIGHT = 1000;
 const CAMERA_DEPTH = 1 / Math.tan((FIELD_OF_VIEW / 2) * Math.PI / 180);
-const DRAW_DISTANCE = 400;
+const DRAW_DISTANCE = 300;
 
 interface Segment {
   index: number;
@@ -39,7 +32,6 @@ interface Segment {
   color: { road: string; grass: string; rumble: string; lane?: string };
   checkpoint?: boolean;
   passed?: boolean;
-  clip?: number;
 }
 
 interface Sprite {
@@ -48,50 +40,22 @@ interface Sprite {
   scale: number;
 }
 
-const THEMES = {
-  city: {
-    colors: {
-      light: { road: '#1a1a1a', grass: '#0a0a0c', rumble: '#00ffff', lane: '#fff' },
-      dark: { road: '#151515', grass: '#050507', rumble: '#ff00ff' }
-    },
-    grip: 1.0,
-    bumps: 0.5,
-    sky: '#020205',
-    scenery: ['building', 'lamp', 'billboard']
-  },
-  desert: {
-    colors: {
-      light: { road: '#444', grass: '#d2b48c', rumble: '#fff', lane: '#fff' },
-      dark: { road: '#3d3d3d', grass: '#c2a47c', rumble: '#b22222' }
-    },
-    grip: 1.1,
-    bumps: 0.2,
-    sky: '#f97316',
-    scenery: ['cactus', 'rock', 'bush']
-  },
-  mountain: {
-    colors: {
-      light: { road: '#333', grass: '#1a4a1a', rumble: '#fff', lane: '#fff' },
-      dark: { road: '#2d2d2d', grass: '#153a15', rumble: '#000' }
-    },
-    grip: 0.85,
-    bumps: 1.8,
-    sky: '#38bdf8',
-    scenery: ['pine', 'rock', 'snow-rock']
-  }
-};
-
-export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack, isMultiplayer, roomId, trackTheme = 'city', carConfig, carSprites, mode = 'classic' }) => {
+export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack, isMultiplayer, roomId }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [isLocalReady, setIsLocalReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [otherPlayers, setOtherPlayers] = useState<{ [key: string]: any }>({});
   const otherPlayersRef = useRef<{ [key: string]: any }>({});
-  const [weather, setWeather] = useState<'clear' | 'rain' | 'fog'>(() => {
-    if (trackTheme === 'mountain') return Math.random() > 0.5 ? 'fog' : 'rain';
-    if (trackTheme === 'city') return Math.random() > 0.7 ? 'rain' : 'clear';
-    return 'clear';
+  const [weather, setWeather] = useState<'clear' | 'rain' | 'fog'>('clear');
+  const [carConfig, setCarConfig] = useState({
+    color: '#4ade80',
+    spoiler: 'large' as 'none' | 'small' | 'large',
+    rims: '#ffffff',
+    decal: 'none' as 'none' | 'stripes' | 'racing-number',
+    engine: 1,
+    tires: 1,
+    turbo: 1
   });
 
   const [hud, setHud] = useState({
@@ -104,11 +68,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     turbo: 100,
     damage: 0,
     slipstream: false,
-    isDrifting: false,
-    leaderboard: [] as any[],
-    driftScore: 0,
-    eliminationTimer: 30,
-    targetTime: 60 + level * 10
+    progress: 0,
+    opponents: [] as number[],
+    leaderboard: [] as any[]
   });
   const [isMuted, setIsMuted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -188,7 +150,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       ctx.ellipse(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 100, 300, 100, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 150, 300, 180, carConfig, false, 0, 0, "YOU");
+      drawPlayerCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 150, 300, 180, carConfig, false, 0, 0);
       return;
     }
 
@@ -196,32 +158,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
-    // Polyfill roundRect for older browsers
-    if (!CanvasRenderingContext2D.prototype.roundRect) {
-      CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
-        let radii: { tl: number; tr: number; br: number; bl: number };
-        if (typeof r === 'number') {
-          radii = { tl: r, tr: r, br: r, bl: r };
-        } else if (Array.isArray(r)) {
-          radii = { tl: r[0] || 0, tr: r[1] || 0, br: r[2] || 0, bl: r[3] || 0 };
-        } else {
-          radii = { tl: 0, tr: 0, br: 0, bl: 0, ...r };
-        }
-        this.beginPath();
-        this.moveTo(x + radii.tl, y);
-        this.lineTo(x + w - radii.tr, y);
-        this.quadraticCurveTo(x + w, y, x + w, y + radii.tr);
-        this.lineTo(x + w, y + h - radii.br);
-        this.quadraticCurveTo(x + w, y + h, x + w - radii.br, y + h);
-        this.lineTo(x + radii.bl, y + h);
-        this.quadraticCurveTo(x, y + h, x, y + h - radii.bl);
-        this.lineTo(x, y + radii.tl);
-        this.quadraticCurveTo(x, y, x + radii.tl, y);
-        this.closePath();
-        return this;
-      };
-    }
 
     // Track state
     let segments: Segment[] = [];
@@ -233,16 +169,14 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     let playerZ = CAMERA_HEIGHT * CAMERA_DEPTH;
     let lap = 1;
     let driftAngle = 0;
-    let lateralVelocity = 0;
     const totalLaps = 2;
     
-    const modelStats = CAR_MODELS[carConfig.model].baseStats;
-    const maxSpeed = modelStats.maxSpeed + (carConfig.engine - 1) * 1500;
-    const accel = modelStats.accel + (carConfig.engine - 1) * 500;
-    const breaking = -maxSpeed * 1.5;
-    const decel = -maxSpeed / 5;
-    const offRoadDecel = -maxSpeed / 2;
-    const offRoadLimit = maxSpeed / 4;
+    const maxSpeed = 15000 + (carConfig.engine - 1) * 2000;
+    const accel = maxSpeed / 4; // Faster acceleration
+    const breaking = -maxSpeed * 2.5; // Stronger braking
+    const decel = -maxSpeed / 4;
+    const offRoadDecel = -maxSpeed / 1.5;
+    const offRoadLimit = maxSpeed / 3;
 
     // Opponents
     const generatePlate = () => {
@@ -265,8 +199,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       percent: 0,
       lap: 1,
       color: ['#ef4444', '#3b82f6', '#facc15', '#a855f7', '#ec4899', '#f97316', '#06b6d4', '#8b5cf6'][Math.floor(Math.random() * 8)],
-      plate: generatePlate(),
-      model: (['speedster', 'muscle', 'tuner'] as CarModelType[])[Math.floor(Math.random() * 3)]
+      plate: generatePlate()
     }));
 
     // Input
@@ -281,17 +214,17 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     window.addEventListener('keyup', handleKeyUp);
 
     // Track Generation
-    const theme = THEMES[trackTheme];
     const addSegment = (curve: number, y: number) => {
       const n = segments.length;
-      const isLight = Math.floor(n / RUMBLE_LENGTH) % 2;
       segments.push({
         index: n,
         p1: { world: { x: 0, y: lastY(), z: n * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
         p2: { world: { x: 0, y: y, z: (n + 1) * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
         curve: curve,
         sprites: [],
-        color: isLight ? theme.colors.light : theme.colors.dark
+        color: Math.floor(n / RUMBLE_LENGTH) % 2 ? 
+          { road: '#333', grass: '#10b981', rumble: '#fff', lane: '#fff' } : 
+          { road: '#3a3a3a', grass: '#059669', rumble: '#000' }
       });
     };
 
@@ -325,10 +258,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       const addHill = (enter: number, hold: number, leave: number, hill: number) => addRoad(enter, hold, leave, 0, hill);
       const addBumps = () => {
         const numBumps = 4 + Math.floor(random() * 6);
-        const bumpSeverity = 5 * theme.bumps;
         for (let i = 0; i < numBumps; i++) {
-          addRoad(10, 10, 10, 0, bumpSeverity);
-          addRoad(10, 10, 10, 0, -bumpSeverity);
+          addRoad(10, 10, 10, 0, 5);
+          addRoad(10, 10, 10, 0, -5);
         }
       };
       const addSCurves = () => {
@@ -384,9 +316,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         if (random() > 0.4) {
           const side = random() > 0.5 ? 1 : -1;
           const offset = (1.5 + random() * 3) * side;
-          const spriteType = theme.scenery[Math.floor(random() * theme.scenery.length)];
           segments[n].sprites.push({ 
-            source: spriteType, 
+            source: 'tree', 
             offset: offset, 
             scale: 1.5 + random() * 2 
           });
@@ -403,13 +334,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       const worldX = p.world.x - cameraX;
       const worldY = p.world.y - cameraY;
       const worldZ = p.world.z - cameraZ;
-      
-      if (worldZ <= 0) {
-        p.screen.y = SCREEN_HEIGHT * 2;
-        p.screen.w = 0;
-        return;
-      }
-
       const scale = CAMERA_DEPTH / worldZ;
       p.screen.x = Math.round((SCREEN_WIDTH / 2) + (scale * worldX * SCREEN_WIDTH / 2));
       p.screen.y = Math.round((SCREEN_HEIGHT / 2) - (scale * worldY * SCREEN_HEIGHT / 2));
@@ -451,9 +375,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     let slipstreamParticles: { x: number; z: number; life: number; opacity: number }[] = [];
     let isSlipstreaming = false;
 
-    let bounceY = 0;
-    let bounceTimer = 0;
-
     const update = (dt: number) => {
       if (finished) {
         audioManager.stopMusic();
@@ -465,62 +386,13 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         return;
       }
 
-      const speedPercent = speed / maxSpeed;
-
-      // Bumpy Road Physics
-      bounceTimer += dt * speedPercent * 20;
-      const bumpSeverity = theme.bumps * (speedPercent * 10);
-      bounceY = Math.sin(bounceTimer) * bumpSeverity;
-      if (Math.random() > 0.95 && theme.bumps > 1) { // Random sharp bumps on mountain
-        bounceY += (Math.random() - 0.5) * 15;
-      }
-
       // Checkpoint Timer Update
-      if (mode === 'classic') {
-        checkpointTime -= dt;
-        if (checkpointTime <= 0) {
-          checkpointTime = 0;
-          // Penalties for running out of time
-          speed = Math.max(0, speed - 5000 * dt);
-          damage = Math.min(100, damage + 5 * dt);
-        }
-      }
-
-      // Trigger Smoke & Drift Mechanic
-      const isBraking = keysRef.current['ArrowDown'] || keysRef.current['KeyS'];
-      const isSteering = keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] || keysRef.current['ArrowRight'] || keysRef.current['KeyD'];
-      const isDrifting = isBraking && isSteering && speed > maxSpeed * 0.2;
-
-      // Elimination Mode Logic
-      if (mode === 'elimination' && !finished) {
-        hud.eliminationTimer -= dt;
-        if (hud.eliminationTimer <= 0) {
-          hud.eliminationTimer = 30;
-          // Eliminate the last racer
-          const allRacers = [
-            { name: 'You', distance: (lap - 1) * trackLength + position, isPlayer: true },
-            ...opponents.map(o => ({ name: o.name, distance: (o.lap - 1) * trackLength + o.z, isPlayer: false }))
-          ];
-          allRacers.sort((a, b) => a.distance - b.distance);
-          const eliminated = allRacers[0];
-          
-          if (eliminated.isPlayer) {
-            finished = true;
-            onRaceEnd(allRacers.length, Date.now() - startTime);
-          } else {
-            opponents = opponents.filter(o => o.name !== eliminated.name);
-            if (opponents.length === 0) {
-              finished = true;
-              onRaceEnd(1, Date.now() - startTime);
-            }
-          }
-        }
-      }
-
-      // Drift Mode Logic
-      if (mode === 'drift' && isDrifting) {
-        const driftPoints = Math.floor(Math.abs(driftAngle) * (speed / 100) * dt * 10);
-        hud.driftScore += driftPoints;
+      checkpointTime -= dt;
+      if (checkpointTime <= 0) {
+        checkpointTime = 0;
+        // Penalties for running out of time
+        speed = Math.max(0, speed - 5000 * dt);
+        damage = Math.min(100, damage + 5 * dt);
       }
 
       // Weather Updates
@@ -536,6 +408,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       }
 
       const playerSegment = findSegment(position + playerZ);
+      const speedPercent = speed / maxSpeed;
 
       // Checkpoint Passing Detection
       if (playerSegment.checkpoint && !playerSegment.passed) {
@@ -563,6 +436,11 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         p.opacity = p.life * 0.5;
         if (p.life <= 0) slipstreamParticles.splice(i, 1);
       }
+
+      // Trigger Smoke & Drift Mechanic
+      const isBraking = keysRef.current['ArrowDown'] || keysRef.current['KeyS'];
+      const isSteering = keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] || keysRef.current['ArrowRight'] || keysRef.current['KeyD'];
+      const isDrifting = isBraking && isSteering && speed > maxSpeed * 0.2;
 
       // Visual Drift Angle
       const targetDriftAngle = isDrifting ? (keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] ? -0.4 : 0.4) : 0;
@@ -625,26 +503,19 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         if (lap > totalLaps) {
           finished = true;
           const pos = opponents.filter(o => o.z > position).length + 1;
-          
-          if (mode === 'time-trial') {
-            const success = (Date.now() - startTime) / 1000 <= hud.targetTime;
-            onRaceEnd(success ? 1 : 8, Date.now() - startTime);
-          } else if (mode === 'drift') {
-            onRaceEnd(1, Date.now() - startTime, hud.driftScore);
-          } else {
-            onRaceEnd(pos, Date.now() - startTime);
-          }
+          onRaceEnd(pos, Date.now() - startTime);
           return;
         }
       }
 
       // Controls
-      const handlingBoost = CAR_MODELS[carConfig.model].baseStats.handling;
-      const grip = (((weather === 'rain' ? 0.7 : 1.0) * theme.grip) + (carConfig.tires - 1) * 0.1) * handlingBoost;
-      const slipstreamBoost = isSlipstreaming ? 1.25 : 1.0; // Slightly increased acceleration boost
-      const slipstreamMaxSpeedBoost = isSlipstreaming ? 1500 : 0; // New max speed bonus
-      const driftFactor = isDrifting ? 3.5 : 1.0; // Increased responsiveness during drift
-      const driftSlowdown = isDrifting ? 0.98 : 1.0; // Slightly less slowdown to maintain momentum
+      const grip = (weather === 'rain' ? 0.65 : 1.0) + (carConfig.tires - 1) * 0.12;
+      const slipstreamBoost = isSlipstreaming ? 1.25 : 1.0;
+      const driftFactor = isDrifting ? 3.2 : 1.0;
+      const driftSlowdown = isDrifting ? 0.985 : 1.0;
+
+      // Handling response: more sensitive at low speeds, stable at high speeds
+      const handlingResponse = 4.5 * (1 - (speedPercent * 0.3));
 
       if (keysRef.current['ArrowUp'] || keysRef.current['KeyW']) speed += accel * dt * grip * slipstreamBoost;
       else if (isBraking) speed += breaking * dt;
@@ -652,21 +523,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
 
       speed *= driftSlowdown;
 
-      // Lateral Movement Physics
-      const steerInput = (keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] ? -1 : 0) + (keysRef.current['ArrowRight'] || keysRef.current['KeyD'] ? 1 : 0);
-      
-      if (isDrifting) {
-        // During drift, steering adds to lateral velocity with inertia
-        lateralVelocity += steerInput * dt * 8 * speedPercent * grip;
-        // Friction is lower during drift
-        lateralVelocity *= 0.96; 
-      } else {
-        // Normal steering: more direct, high friction
-        const targetLateralVelocity = steerInput * 3 * speedPercent * grip;
-        lateralVelocity = lateralVelocity + (targetLateralVelocity - lateralVelocity) * 0.2;
-      }
-
-      playerX += lateralVelocity * dt * 1.5;
+      if (keysRef.current['ArrowLeft'] || keysRef.current['KeyA']) playerX -= dt * handlingResponse * driftFactor * speedPercent * grip;
+      if (keysRef.current['ArrowRight'] || keysRef.current['KeyD']) playerX += dt * handlingResponse * driftFactor * speedPercent * grip;
 
       // Off-road penalty
       if ((playerX < -1) || (playerX > 1)) {
@@ -681,18 +539,11 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       
       // Speed limits
       const damageFactor = 1 - (damage / 100) * 0.5; // Max 50% speed reduction
-      const currentMax = (turboActive ? TURBO_MAX_SPEED : (maxSpeed + slipstreamMaxSpeedBoost)) * damageFactor;
+      const currentMax = (turboActive ? TURBO_MAX_SPEED : maxSpeed) * damageFactor;
       speed = Math.max(0, Math.min(currentMax, speed));
 
       // Curve centrifugal force
-      const centrifugalForce = (dt * speedPercent * playerSegment.curve * 2.0);
-      if (isDrifting) {
-        // Drifting allows you to "lean" into the curve better or slide out more
-        playerX -= centrifugalForce * 0.5; 
-        lateralVelocity -= centrifugalForce * 0.5;
-      } else {
-        playerX -= centrifugalForce;
-      }
+      playerX -= (dt * speedPercent * playerSegment.curve * 1.5);
 
       // Update Opponents (Reactive AI)
       isSlipstreaming = false;
@@ -704,9 +555,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
 
         if (zDiff > 500 && zDiff < 4000 && Math.abs(otherX - playerX) < 0.35) {
           isSlipstreaming = true;
-          // Suction effect: pull player towards the slipstream center
-          playerX = playerX + (otherX - playerX) * 0.02;
-          
           // Add slipstream particles
           if (Math.random() > 0.4) {
             slipstreamParticles.push({
@@ -815,10 +663,12 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
         turbo: turboMeter,
         damage: damage,
         slipstream: isSlipstreaming,
-        isDrifting: isDrifting,
         checkpointTime: checkpointTime,
-        driftScore: hud.driftScore,
-        eliminationTimer: hud.eliminationTimer
+        progress: position / trackLength,
+        opponents: [
+          ...opponents.map(o => o.z / trackLength),
+          ...Object.values(otherPlayersRef.current).map((p: any) => (p.z || 0) / trackLength)
+        ]
       }));
     };
 
@@ -826,105 +676,97 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       ctx.clearRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
       // Sky (Gradient)
-      const skyGrad = ctx.createLinearGradient(0, 0, 0, SCREEN_HEIGHT / 2);
-      if (weather === 'fog') {
-        skyGrad.addColorStop(0, '#334155');
-        skyGrad.addColorStop(1, '#64748b');
-      } else if (weather === 'rain') {
-        skyGrad.addColorStop(0, '#0f172a');
-        skyGrad.addColorStop(1, '#1e293b');
-      } else {
-        skyGrad.addColorStop(0, theme.sky);
-        skyGrad.addColorStop(1, shadeColor(theme.sky, 20));
-      }
-      ctx.fillStyle = skyGrad;
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, SCREEN_HEIGHT / 2);
+    if (weather === 'fog') {
+      skyGrad.addColorStop(0, '#1e293b');
+      skyGrad.addColorStop(1, '#475569');
+    } else if (weather === 'rain') {
+      skyGrad.addColorStop(0, '#020617');
+      skyGrad.addColorStop(1, '#1e293b');
+    } else {
+      skyGrad.addColorStop(0, '#0c4a6e'); // Deep midnight blue
+      skyGrad.addColorStop(0.5, '#0369a1'); // Ocean blue
+      skyGrad.addColorStop(1, '#38bdf8'); // Sky blue
+    }
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
+
+    // Sun / Horizon Glow (More atmospheric)
+    if (weather === 'clear') {
+      const sunGrad = ctx.createRadialGradient(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 300);
+      sunGrad.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
+      sunGrad.addColorStop(0.2, 'rgba(255, 255, 150, 0.1)');
+      sunGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = sunGrad;
       ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
+    }
 
-      // Draw Ground
-      ctx.fillStyle = theme.colors.dark.grass;
-      ctx.fillRect(0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
+    // Mountains (More realistic silhouettes)
+    ctx.fillStyle = '#022c22';
+    ctx.beginPath();
+    ctx.moveTo(0, SCREEN_HEIGHT / 2);
+    ctx.lineTo(100, 150);
+    ctx.lineTo(200, 250);
+    ctx.lineTo(350, 100);
+    ctx.lineTo(500, 280);
+    ctx.lineTo(650, 120);
+    ctx.lineTo(800, 300);
+    ctx.lineTo(1066, SCREEN_HEIGHT / 2);
+    ctx.fill();
 
-      // Sun / Horizon Glow
-      if (weather === 'clear' && trackTheme !== 'city') {
-        const sunGrad = ctx.createRadialGradient(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 200);
-        sunGrad.addColorStop(0, trackTheme === 'desert' ? 'rgba(255, 200, 100, 0.4)' : 'rgba(255, 255, 200, 0.4)');
-        sunGrad.addColorStop(1, 'rgba(255, 255, 200, 0)');
-        ctx.fillStyle = sunGrad;
-        ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
-      }
-
-      // Theme-specific Background Elements
-      if (trackTheme === 'mountain') {
-        // Distant Mountains
-        ctx.fillStyle = '#1e293b';
-        ctx.beginPath();
-        ctx.moveTo(0, SCREEN_HEIGHT / 2);
-        ctx.lineTo(100, 150);
-        ctx.lineTo(250, 280);
-        ctx.lineTo(400, 100);
-        ctx.lineTo(550, 220);
-        ctx.lineTo(700, 140);
-        ctx.lineTo(800, SCREEN_HEIGHT / 2);
-        ctx.fill();
-
-        // Snow Peaks
-        ctx.fillStyle = '#f8fafc';
-        ctx.beginPath();
-        ctx.moveTo(100, 150); ctx.lineTo(80, 190); ctx.lineTo(120, 190); ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(400, 100); ctx.lineTo(370, 150); ctx.lineTo(430, 150); ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(700, 140); ctx.lineTo(670, 180); ctx.lineTo(730, 180); ctx.fill();
-      } else if (trackTheme === 'city') {
-        if (cityscapeRef.current.length === 0) {
-          for (let i = 0; i < 20; i++) {
-            cityscapeRef.current.push({ 
-              x: i * 50, 
-              h: 150 + Math.random() * 250, 
-              w: 40 + Math.random() * 60,
-              windows: Array.from({ length: 10 }, () => ({
-                x: 5 + Math.random() * 30,
-                y: 10 + Math.random() * 100,
-                on: Math.random() > 0.3
-              }))
-            });
-          }
-        }
-        cityscapeRef.current.forEach(b => {
-          ctx.fillStyle = '#020617';
-          ctx.fillRect(b.x, SCREEN_HEIGHT / 2 - b.h, b.w, b.h);
-          // Windows
-          b.windows.forEach((w: any) => {
-            if (w.on) {
-              ctx.fillStyle = Math.random() > 0.9 ? '#fde047' : '#334155';
-              ctx.fillRect(b.x + w.x, SCREEN_HEIGHT / 2 - b.h + w.y, 4, 4);
-            }
-          });
-          // Red beacon on top
-          if (b.h > 300) {
-            ctx.fillStyle = Date.now() % 1000 > 500 ? '#ef4444' : '#450a0a';
-            ctx.fillRect(b.x + b.w / 2 - 2, SCREEN_HEIGHT / 2 - b.h - 5, 4, 4);
-          }
+    // Cityscape (More detailed buildings)
+    if (cityscapeRef.current.length === 0) {
+      for (let i = 0; i < 20; i++) {
+        cityscapeRef.current.push({ 
+          x: i * 60, 
+          h: 40 + Math.random() * 180, 
+          w: 30 + Math.random() * 40,
+          windows: Array.from({ length: 10 }, () => Math.random() > 0.7)
         });
-      } else if (trackTheme === 'desert') {
-        // Dunes
-        ctx.fillStyle = '#92400e';
-        ctx.beginPath();
-        ctx.moveTo(0, SCREEN_HEIGHT / 2);
-        ctx.quadraticCurveTo(200, SCREEN_HEIGHT / 2 - 40, 400, SCREEN_HEIGHT / 2);
-        ctx.quadraticCurveTo(600, SCREEN_HEIGHT / 2 - 80, 800, SCREEN_HEIGHT / 2);
-        ctx.fill();
-        
-        // Heat Haze Effect
-        if (weather === 'clear') {
-          ctx.fillStyle = 'rgba(251, 146, 60, 0.05)';
-          for (let i = 0; i < 5; i++) {
-            const hazeY = SCREEN_HEIGHT / 2 - 20 - i * 10;
-            const hazeOffset = Math.sin(Date.now() / 200 + i) * 10;
-            ctx.fillRect(hazeOffset, hazeY, SCREEN_WIDTH, 5);
+      }
+    }
+    
+    cityscapeRef.current.forEach(b => {
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(b.x, SCREEN_HEIGHT / 2 - b.h, b.w, b.h);
+      // Windows
+      ctx.fillStyle = '#fef08a';
+      b.windows.forEach((on, i) => {
+        if (on) {
+          const wx = b.x + (i % 2) * (b.w / 2) + 5;
+          const wy = SCREEN_HEIGHT / 2 - b.h + Math.floor(i / 2) * 20 + 5;
+          if (wy < SCREEN_HEIGHT / 2 - 10) {
+            ctx.fillRect(wx, wy, 4, 4);
           }
         }
-      }
+      });
+    });
+
+      // Mountain Shading
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.beginPath();
+      ctx.moveTo(150, 120);
+      ctx.lineTo(300, 300);
+      ctx.lineTo(150, 300);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(450, 80);
+      ctx.lineTo(600, 250);
+      ctx.lineTo(450, 250);
+      ctx.fill();
+
+      // Snow Peaks
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      ctx.moveTo(150, 120);
+      ctx.lineTo(120, 160);
+      ctx.lineTo(180, 160);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(450, 80);
+      ctx.lineTo(420, 120);
+      ctx.lineTo(480, 120);
+      ctx.fill();
 
       const baseSegment = findSegment(position);
       const basePercent = (position % SEGMENT_LENGTH) / SEGMENT_LENGTH;
@@ -933,7 +775,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
 
       let x = 0;
       let dx = -(baseSegment.curve * basePercent);
-      let maxy = SCREEN_HEIGHT;
 
       // Render Road
       for (let n = 0; n < DRAW_DISTANCE; n++) {
@@ -944,9 +785,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
 
         x += dx;
         dx += segment.curve;
-        segment.clip = maxy;
 
-        if (segment.p1.screen.y <= segment.p2.screen.y || segment.p2.screen.y > maxy) continue;
+        if (segment.p1.screen.y <= segment.p2.screen.y || segment.p2.screen.y >= SCREEN_HEIGHT) continue;
 
         // Draw Grass (with gradient)
         const grassGrad = ctx.createLinearGradient(0, segment.p2.screen.y, 0, segment.p1.screen.y);
@@ -1017,17 +857,12 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
           const l2 = segment.p2.screen.w / 40;
           drawPolygon(ctx, segment.p1.screen.x, segment.p1.screen.y, l1, segment.p2.screen.x, segment.p2.screen.y, l2, segment.color.lane);
         }
-
-        maxy = segment.p2.screen.y;
       }
 
       // Render Sprites (Trees and Opponents)
       for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
         const segment = segments[(baseSegment.index + n) % segments.length];
         
-        // Skip if segment is hidden behind a hill
-        if (segment.p2.screen.y > (segment.clip || SCREEN_HEIGHT)) continue;
-
         // Checkpoints
         if (segment.checkpoint) {
           const archX = segment.p1.screen.x;
@@ -1037,28 +872,18 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
           drawCheckpoint(ctx, archX, archY, archW, archH, segment.passed || false);
         }
 
-        // Scenery
+        // Trees
         segment.sprites.forEach(sprite => {
           const spriteX = segment.p1.screen.x + (segment.p1.screen.w * sprite.offset);
           const spriteY = segment.p1.screen.y;
           const spriteW = (sprite.scale * segment.p1.screen.w / 2);
           const spriteH = spriteW * 1.5;
-          
-          switch(sprite.source) {
-            case 'cactus': drawCactus(ctx, spriteX, spriteY, spriteW, spriteH); break;
-            case 'building': drawBuilding(ctx, spriteX, spriteY, spriteW, spriteH); break;
-            case 'pine': drawPine(ctx, spriteX, spriteY, spriteW, spriteH); break;
-            case 'rock': drawRock(ctx, spriteX, spriteY, spriteW, spriteH); break;
-            default: drawTree(ctx, spriteX, spriteY, spriteW, spriteH); break;
-          }
+          drawTree(ctx, spriteX, spriteY, spriteW, spriteH);
         });
 
         // Other Players
         Object.values(otherPlayersRef.current).forEach((player: any) => {
-          if (!player || typeof player.z !== 'number' || !player.carConfig) return;
           const playerSegment = findSegment(player.z);
-          if (!playerSegment) return;
-          
           // Only render if in view
           if (playerSegment.index >= baseSegment.index && playerSegment.index < baseSegment.index + DRAW_DISTANCE) {
             const relativeZ = player.z - position;
@@ -1069,15 +894,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
               const screenW = Math.round(scale * CAR_WIDTH * SCREEN_WIDTH / 2);
               const screenH = screenW * 0.6;
               
-              const opponentConfig: CarConfig = {
-                model: player.carConfig.model || 'speedster',
-                color: player.carConfig.color,
-                spoiler: player.carConfig.spoiler || 'large',
-                rims: '#fff',
-                decal: 'none',
-                engine: 1, tires: 1, turbo: 1
-              };
-              drawCar(ctx, screenX, screenY, screenW, screenH, opponentConfig, false, 0, 0, player.id.substring(0, 4));
+              drawOpponentCar(ctx, screenX, screenY, screenW, screenH, player.carConfig.color, player.id.substring(0, 4));
             }
           }
         });
@@ -1089,24 +906,13 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
             const oppY = segment.p1.screen.y;
             const oppW = (segment.p1.screen.w * (CAR_WIDTH / ROAD_WIDTH));
             const oppH = oppW * 0.6;
-            const oppConfig: CarConfig = {
-              model: opp.model,
-              color: opp.color,
-              spoiler: 'large',
-              rims: '#fff',
-              decal: 'none',
-              engine: 1, tires: 1, turbo: 1
-            };
-            drawCar(ctx, oppX, oppY, oppW, oppH, oppConfig, false, 0, 0, opp.plate);
+            drawOpponentCar(ctx, oppX, oppY, oppW, oppH, opp.color, opp.plate);
           }
         });
       }
 
       // Render Player Car (Rear View)
       const isBraking = keysRef.current['ArrowDown'] || keysRef.current['KeyS'];
-      
-      // Draw car with bounceY
-      drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60 + bounceY, 180, 110, carConfig, isBraking, damage, driftAngle, "YOU");
 
       // Slipstream Screen Effect
       if (isSlipstreaming) {
@@ -1133,7 +939,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       });
       ctx.globalAlpha = 1.0;
 
-      drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 180, 110, carConfig, isBraking, damage, driftAngle, "DRIFT");
+      drawPlayerCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 180, 110, carConfig, isBraking, damage, driftAngle);
 
       // Rain Rendering
       if (weather === 'rain') {
@@ -1273,108 +1079,148 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
     ctx.fill();
 
     if (withTexture) {
-      // Add subtle grain/noise to road
-      ctx.fillStyle = 'rgba(0,0,0,0.1)';
-      for (let i = 0; i < 5; i++) {
+      // Add more realistic road texture: asphalt grain and cracks
+      ctx.fillStyle = 'rgba(255,255,255,0.03)';
+      for (let i = 0; i < 8; i++) {
         const rx = x1 - w1 + Math.random() * (w1 * 2);
         const ry = y2 + Math.random() * (y1 - y2);
-        const rw = 2 + Math.random() * 4;
+        const rw = 1 + Math.random() * 3;
         ctx.fillRect(rx, ry, rw, 1);
+      }
+      
+      // Subtle dark patches
+      ctx.fillStyle = 'rgba(0,0,0,0.05)';
+      for (let i = 0; i < 3; i++) {
+        const rx = x1 - w1 + Math.random() * (w1 * 2);
+        const ry = y2 + Math.random() * (y1 - y2);
+        const rw = 10 + Math.random() * 20;
+        ctx.fillRect(rx, ry, rw, 2);
       }
     }
   };
 
   const drawTree = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    // Trunk
-    ctx.fillStyle = '#3d2b1f';
-    ctx.fillRect(x - w / 10, y - h, w / 5, h);
-    // Sakura Leaves (Pink/Purple)
-    ctx.fillStyle = '#ffb7c5';
-    ctx.beginPath();
-    ctx.arc(x, y - h, w, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#d946ef'; // Vibrant purple/pink
-    ctx.beginPath();
-    ctx.arc(x - w / 2, y - h - w / 2, w / 1.5, 0, Math.PI * 2);
-    ctx.arc(x + w / 2, y - h - w / 2, w / 1.5, 0, Math.PI * 2);
-    ctx.fill();
+    // Trunk with shading
+    const trunkGrad = ctx.createLinearGradient(x - w/10, y, x + w/10, y);
+    trunkGrad.addColorStop(0, '#2d1b0f');
+    trunkGrad.addColorStop(1, '#4d3b2f');
+    ctx.fillStyle = trunkGrad;
+    ctx.fillRect(x - w / 10, y - h * 0.4, w / 5, h * 0.4);
+
+    // Detailed Foliage (Multiple layers for depth)
+    const drawFoliage = (fx: number, fy: number, fw: number, color: string) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(fx, fy, fw, 0, Math.PI * 2);
+      ctx.fill();
+      // Highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.beginPath();
+      ctx.arc(fx - fw/3, fy - fw/3, fw/2, 0, Math.PI * 2);
+      ctx.fill();
+    };
+
+    drawFoliage(x, y - h * 0.7, w * 0.8, '#166534');
+    drawFoliage(x - w * 0.4, y - h * 0.5, w * 0.6, '#15803d');
+    drawFoliage(x + w * 0.4, y - h * 0.5, w * 0.6, '#15803d');
+    drawFoliage(x, y - h * 0.9, w * 0.5, '#22c55e');
   };
 
-  const drawCactus = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    ctx.fillStyle = '#166534';
-    ctx.fillRect(x - w / 6, y - h, w / 3, h);
-    ctx.fillRect(x - w / 2, y - h * 0.7, w / 3, h / 10);
-    ctx.fillRect(x - w / 2, y - h * 0.8, w / 6, h / 5);
-    ctx.fillRect(x + w / 6, y - h * 0.5, w / 3, h / 10);
-    ctx.fillRect(x + w / 3, y - h * 0.6, w / 6, h / 5);
-  };
-
-  const drawBuilding = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(x - w / 2, y - h, w, h);
-    ctx.fillStyle = '#fde047';
-    for (let i = 0; i < 2; i++) {
-      for (let j = 0; j < 4; j++) {
-        if (Math.random() > 0.3) {
-          ctx.fillRect(x - w / 2 + 5 + i * (w / 3), y - h + 5 + j * (h / 5), w / 6, h / 10);
-        }
-      }
-    }
-  };
-
-  const spriteImagesRef = useRef<Record<string, HTMLImageElement>>({});
-
-  useEffect(() => {
-    if (carSprites) {
-      Object.entries(carSprites).forEach(([id, url]) => {
-        const spriteUrl = url as string;
-        if (!spriteImagesRef.current[id] || spriteImagesRef.current[id].src !== spriteUrl) {
-          const img = new Image();
-          img.src = spriteUrl;
-          spriteImagesRef.current[id] = img;
-        }
-      });
-    }
-  }, [carSprites]);
-
-  const drawCar = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig, isBraking: boolean, damage: number = 0, driftAngle: number = 0, plate: string = "") => {
-    const model = CAR_MODELS[config.model] || Object.values(CAR_MODELS)[0];
-    const color = config.color || model.color;
-    const visuals = model.visuals;
-    
+  const drawOpponentCar = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, plate: string) => {
     ctx.save();
-
-    // Apply Drift Tilt
-    if (driftAngle !== 0) {
-      ctx.translate(x, y);
-      ctx.rotate(driftAngle);
-      ctx.translate(-x, -y);
-    }
     
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(x, y, w * 0.6 * visuals.bodyWidth, h * 0.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y, w * 0.6, h * 0.2, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Sprite Rendering
-    const spriteImg = spriteImagesRef.current[config.model];
-    if (spriteImg && spriteImg.complete) {
-      ctx.drawImage(spriteImg, x - w / 2, y - h, w, h);
-      
-      // Add plate if needed
-      if (plate) {
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 12, y - h * 0.1, 24, 10);
-        ctx.fillStyle = '#000';
-        ctx.font = 'bold 7px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(plate, x, y - h * 0.1 + 8);
-      }
-      
-      ctx.restore();
-      return;
-    }
+    // Wheels (Ellipses for 3D look)
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.ellipse(x - w * 0.4, y - h * 0.15, w * 0.1, h * 0.15, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + w * 0.4, y - h * 0.15, w * 0.1, h * 0.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Side Mirrors
+    ctx.fillStyle = shadeColor(color, -20);
+    ctx.fillRect(x - w * 0.48, y - h * 0.65, w * 0.08, h * 0.1);
+    ctx.fillRect(x + w * 0.4, y - h * 0.65, w * 0.08, h * 0.1);
+
+    // Spoiler
+    ctx.fillStyle = '#222';
+    ctx.fillRect(x - w / 2, y - h - 10, w, 6); // Wing
+    ctx.fillRect(x - w * 0.35, y - h - 10, 3, 10); // Left mount
+    ctx.fillRect(x + w * 0.35 - 3, y - h - 10, 3, 10); // Right mount
+
+    // Car Body - Lower (Flared)
+    const gradient = ctx.createLinearGradient(x, y - h, x, y);
+    gradient.addColorStop(0, color);
+    gradient.addColorStop(1, shadeColor(color, -30));
+    ctx.fillStyle = gradient;
+    
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2, y - h * 0.1);
+    ctx.bezierCurveTo(x - w / 2, y - h * 0.4, x - w * 0.45, y - h * 0.6, x - w * 0.45, y - h * 0.6);
+    ctx.lineTo(x + w * 0.45, y - h * 0.6);
+    ctx.bezierCurveTo(x + w * 0.45, y - h * 0.6, x + w / 2, y - h * 0.4, x + w / 2, y - h * 0.1);
+    ctx.closePath();
+    ctx.fill();
+
+    // Car Body - Upper (Tapered Cabin)
+    ctx.fillStyle = shadeColor(color, -10);
+    ctx.beginPath();
+    ctx.moveTo(x - w * 0.4, y - h * 0.6);
+    ctx.bezierCurveTo(x - w * 0.35, y - h * 0.8, x - w * 0.3, y - h, x - w * 0.3, y - h);
+    ctx.lineTo(x + w * 0.3, y - h);
+    ctx.bezierCurveTo(x + w * 0.3, y - h, x + w * 0.35, y - h * 0.8, x + w * 0.4, y - h * 0.6);
+    ctx.closePath();
+    ctx.fill();
+
+    // Rear Window
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath();
+    ctx.moveTo(x - w * 0.25, y - h + 5);
+    ctx.lineTo(x + w * 0.25, y - h + 5);
+    ctx.lineTo(x + w * 0.35, y - h * 0.6 - 5);
+    ctx.lineTo(x - w * 0.35, y - h * 0.6 - 5);
+    ctx.closePath();
+    ctx.fill();
+
+    // Tail Lights
+    ctx.fillStyle = '#ef4444';
+    ctx.shadowBlur = 5;
+    ctx.shadowColor = '#ef4444';
+    ctx.beginPath();
+    ctx.roundRect(x - w * 0.42, y - h * 0.5, w / 5, h / 10, 2);
+    ctx.roundRect(x + w * 0.42 - w / 5, y - h * 0.5, w / 5, h / 10, 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // License Plate
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x - 12, y - h * 0.2, 24, 10);
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 7px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(plate, x, y - h * 0.2 + 8);
+
+    ctx.restore();
+  };
+
+  const drawPlayerCar = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: any, isBraking: boolean, damage: number = 0, driftAngle: number = 0) => {
+    ctx.save();
+
+    // Apply Drift Tilt
+    ctx.translate(x, y);
+    ctx.rotate(driftAngle);
+    ctx.translate(-x, -y);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 5, w * 0.7, h * 0.25, 0, 0, Math.PI * 2);
+    ctx.fill();
 
     // Smoke if damaged
     if (damage > 50) {
@@ -1386,122 +1232,226 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       }
     }
 
-    // Wheels
-    ctx.fillStyle = '#111';
+    // Wheels (Flared Arches with 3D Ellipses)
+    ctx.fillStyle = '#000';
     ctx.beginPath();
-    ctx.ellipse(x - w * 0.4 * visuals.bodyWidth, y - h * 0.15, w * 0.1, h * 0.15, 0, 0, Math.PI * 2);
-    ctx.ellipse(x + w * 0.4 * visuals.bodyWidth, y - h * 0.15, w * 0.1, h * 0.15, 0, 0, Math.PI * 2);
+    ctx.ellipse(x - w * 0.45, y - h * 0.2, w * 0.12, h * 0.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + w * 0.45, y - h * 0.2, w * 0.12, h * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Rims
+    ctx.fillStyle = config.rims;
+    ctx.beginPath();
+    ctx.ellipse(x - w * 0.45, y - h * 0.2, w * 0.06, h * 0.1, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + w * 0.45, y - h * 0.2, w * 0.06, h * 0.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Side Mirrors
+    ctx.fillStyle = shadeColor(config.color, -30);
+    ctx.beginPath();
+    ctx.roundRect(x - w * 0.52, y - h * 0.65, w * 0.1, h * 0.12, 3);
+    ctx.roundRect(x + w * 0.42, y - h * 0.65, w * 0.1, h * 0.12, 3);
     ctx.fill();
 
     // Spoiler
     if (config.spoiler !== 'none') {
-      ctx.fillStyle = '#222';
-      const spoilerY = y - h * visuals.bodyHeight - h * visuals.cabinHeight;
-      const spoilerW = w * visuals.bodyWidth * (config.spoiler === 'large' ? 1.1 : 0.9);
+      ctx.fillStyle = '#111';
       
-      if (visuals.spoilerType === 'wing') {
-        ctx.fillRect(x - spoilerW / 2, spoilerY - 10, spoilerW, 6); // Wing
-        ctx.fillRect(x - spoilerW * 0.35, spoilerY - 10, 3, 10); // Left mount
-        ctx.fillRect(x + spoilerW * 0.35 - 3, spoilerY - 10, 3, 10); // Right mount
-      } else {
-        // Ducktail
+      if (config.spoiler === 'small') {
+        // Low-profile Lip / Ducktail Spoiler
+        const wingWidth = w * 0.9;
+        const wingHeight = 8;
         ctx.beginPath();
-        ctx.moveTo(x - spoilerW / 2, spoilerY);
-        ctx.lineTo(x + spoilerW / 2, spoilerY);
-        ctx.lineTo(x + spoilerW / 2, spoilerY - 8);
-        ctx.lineTo(x - spoilerW / 2, spoilerY - 8);
+        ctx.moveTo(x - wingWidth / 2, y - h);
+        ctx.lineTo(x + wingWidth / 2, y - h);
+        ctx.lineTo(x + wingWidth / 2 + 5, y - h - wingHeight);
+        ctx.lineTo(x - wingWidth / 2 - 5, y - h - wingHeight);
+        ctx.closePath();
         ctx.fill();
+        
+        // Subtle shading
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.fillRect(x - wingWidth / 2, y - h - wingHeight, wingWidth, 2);
+      } else if (config.spoiler === 'large') {
+        // Aggressive GT Wing with Swan-neck mounts
+        const wingWidth = w + 50;
+        const wingHeight = 32;
+        
+        // Wing Main (Aerodynamic Curve)
+        ctx.fillStyle = '#0a0a0a';
+        ctx.beginPath();
+        ctx.moveTo(x - wingWidth / 2, y - h - wingHeight);
+        ctx.quadraticCurveTo(x, y - h - wingHeight - 5, x + wingWidth / 2, y - h - wingHeight);
+        ctx.lineTo(x + wingWidth / 2, y - h - wingHeight + 6);
+        ctx.quadraticCurveTo(x, y - h - wingHeight + 1, x - wingWidth / 2, y - h - wingHeight + 6);
+        ctx.closePath();
+        ctx.fill();
+        
+        // End Plates (Aerodynamic Shape)
+        ctx.fillStyle = '#111';
+        ctx.beginPath();
+        ctx.roundRect(x - wingWidth / 2 - 2, y - h - wingHeight - 8, 6, 20, 2);
+        ctx.roundRect(x + wingWidth / 2 - 4, y - h - wingHeight - 8, 6, 20, 2);
+        ctx.fill();
+
+        // Swan-neck Mounts (More realistic)
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        // Left mount
+        ctx.moveTo(x - w * 0.2, y - h + 5);
+        ctx.quadraticCurveTo(x - w * 0.25, y - h - wingHeight / 2, x - w * 0.15, y - h - wingHeight);
+        // Right mount
+        ctx.moveTo(x + w * 0.2, y - h + 5);
+        ctx.quadraticCurveTo(x + w * 0.25, y - h - wingHeight / 2, x + w * 0.15, y - h - wingHeight);
+        ctx.stroke();
       }
     }
 
-    // Car Body - Lower
-    const gradient = ctx.createLinearGradient(x, y - h * visuals.bodyHeight, x, y);
-    gradient.addColorStop(0, color);
-    gradient.addColorStop(1, shadeColor(color, -30));
-    ctx.fillStyle = gradient;
-    
-    const bodyW = w * visuals.bodyWidth;
-    const bodyH = h * visuals.bodyHeight;
+    // Car Body - Lower (Aggressive Widebody Curves)
+    const bodyGrad = ctx.createLinearGradient(x, y - h, x, y);
+    bodyGrad.addColorStop(0, config.color);
+    bodyGrad.addColorStop(1, shadeColor(config.color, -40));
+    ctx.fillStyle = bodyGrad;
     
     ctx.beginPath();
-    ctx.moveTo(x - bodyW / 2, y - bodyH * 0.1);
-    ctx.bezierCurveTo(x - bodyW / 2, y - bodyH * 0.4, x - bodyW * 0.45, y - bodyH * 0.6, x - bodyW * 0.45, y - bodyH * 0.6);
-    ctx.lineTo(x + bodyW * 0.45, y - bodyH * 0.6);
-    ctx.bezierCurveTo(x + bodyW * 0.45, y - bodyH * 0.6, x + bodyW / 2, y - bodyH * 0.4, x + bodyW / 2, y - bodyH * 0.1);
+    ctx.moveTo(x - w / 2, y - h * 0.1);
+    ctx.bezierCurveTo(x - w / 2, y - h * 0.4, x - w * 0.48, y - h * 0.6, x - w * 0.48, y - h * 0.6);
+    ctx.lineTo(x + w * 0.48, y - h * 0.6);
+    ctx.bezierCurveTo(x + w * 0.48, y - h * 0.6, x + w / 2, y - h * 0.4, x + w / 2, y - h * 0.1);
     ctx.closePath();
     ctx.fill();
 
-    // Car Body - Upper (Cabin)
-    ctx.fillStyle = shadeColor(color, -10);
-    const cabinW = w * visuals.cabinWidth;
-    const cabinH = h * visuals.cabinHeight;
-    const cabinY = y - bodyH * 0.6;
+    // Body Highlight (Top edge of widebody)
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Rear Diffuser / Bumper
+    ctx.fillStyle = '#0a0a0a';
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2, y - h * 0.18, w, h * 0.18, 5);
+    ctx.fill();
+
+    // Car Body - Upper (Tapered Sports Cabin with Curves)
+    ctx.fillStyle = shadeColor(config.color, -15);
+    ctx.beginPath();
+    ctx.moveTo(x - w * 0.42, y - h * 0.6);
+    ctx.bezierCurveTo(x - w * 0.38, y - h * 0.85, x - w * 0.32, y - h, x - w * 0.32, y - h);
+    ctx.lineTo(x + w * 0.32, y - h);
+    ctx.bezierCurveTo(x + w * 0.32, y - h, x + w * 0.38, y - h * 0.85, x + w * 0.42, y - h * 0.6);
+    ctx.closePath();
+    ctx.fill();
+
+    // Roof Highlight
+    const roofGrad = ctx.createLinearGradient(x, y - h, x, y - h + 10);
+    roofGrad.addColorStop(0, 'rgba(255,255,255,0.2)');
+    roofGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = roofGrad;
+    ctx.fill();
+
+    // Decals
+    if (config.decal === 'stripes') {
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.fillRect(x - w / 10, y - h, w / 20, h);
+      ctx.fillRect(x + w / 20, y - h, w / 20, h);
+    } else if (config.decal === 'racing-number') {
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(x, y - h * 0.45, w / 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'black';
+      ctx.font = `bold ${h / 5}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('86', x, y - h * 0.45);
+    }
+
+    // Rear Window (Blue Reflection)
+    const winGrad = ctx.createLinearGradient(x, y - h + 15, x, y - h + 15 + h / 2.5);
+    winGrad.addColorStop(0, '#3b82f6');
+    winGrad.addColorStop(0.5, '#60a5fa');
+    winGrad.addColorStop(1, '#1d4ed8');
+    ctx.fillStyle = winGrad;
+    ctx.beginPath();
+    ctx.moveTo(x - w * 0.28, y - h + 12);
+    ctx.lineTo(x + w * 0.28, y - h + 12);
+    ctx.lineTo(x + w * 0.38, y - h * 0.6 - 8);
+    ctx.lineTo(x - w * 0.38, y - h * 0.6 - 8);
+    ctx.closePath();
+    ctx.fill();
+
+    // Damage Cracks on window
+    if (damage > 20) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x - w * 0.1, y - h + 20);
+      ctx.lineTo(x + w * 0.1, y - h + 40);
+      ctx.moveTo(x + w * 0.05, y - h + 25);
+      ctx.lineTo(x - w * 0.05, y - h + 45);
+      ctx.stroke();
+    }
     
-    ctx.beginPath();
-    ctx.moveTo(x - cabinW / 2, cabinY);
-    ctx.bezierCurveTo(x - cabinW * 0.9, cabinY - cabinH * 0.5, x - cabinW * 0.8, cabinY - cabinH, x - cabinW * 0.8, cabinY - cabinH);
-    ctx.lineTo(x + cabinW * 0.8, cabinY - cabinH);
-    ctx.bezierCurveTo(x + cabinW * 0.8, cabinY - cabinH, x + cabinW * 0.9, cabinY - cabinH * 0.5, x + cabinW / 2, cabinY);
-    ctx.closePath();
-    ctx.fill();
+    if (damage > 60) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.beginPath();
+      ctx.moveTo(x - w * 0.2, y - h + 15);
+      ctx.lineTo(x - w * 0.1, y - h + 35);
+      ctx.stroke();
+    }
 
-    // Rear Window
-    ctx.fillStyle = '#1e293b';
+    // Tail Lights (Vibrant Red with Bloom)
+    ctx.fillStyle = isBraking ? '#ff0000' : '#880000';
+    ctx.shadowBlur = isBraking ? 45 : 25;
+    ctx.shadowColor = '#ff0000';
     ctx.beginPath();
-    ctx.moveTo(x - cabinW * 0.6, cabinY - cabinH + 5);
-    ctx.lineTo(x + cabinW * 0.6, cabinY - cabinH + 5);
-    ctx.lineTo(x + cabinW * 0.7, cabinY - 5);
-    ctx.lineTo(x - cabinW * 0.7, cabinY - 5);
-    ctx.closePath();
+    ctx.roundRect(x - w * 0.44, y - h * 0.52, w / 4, h / 10, 3);
+    ctx.roundRect(x + w * 0.44 - w / 4, y - h * 0.52, w / 4, h / 10, 3);
     ctx.fill();
-
-    // Tail Lights
-    ctx.fillStyle = isBraking ? '#ff0000' : '#ef4444';
-    ctx.shadowBlur = isBraking ? 15 : 5;
-    ctx.shadowColor = '#ef4444';
+    
+    // Inner light glow
+    ctx.fillStyle = isBraking ? '#ffffff' : '#ffcccc';
+    ctx.shadowBlur = isBraking ? 25 : 10;
     ctx.beginPath();
-    ctx.roundRect(x - bodyW * 0.42, y - bodyH * 0.5, bodyW / 5, bodyH / 10, 2);
-    ctx.roundRect(x + bodyW * 0.42 - bodyW / 5, y - bodyH * 0.5, bodyW / 5, bodyH / 10, 2);
+    ctx.roundRect(x - w * 0.38, y - h * 0.5 + 1, w / 15, h / 20, 1);
+    ctx.roundRect(x + w * 0.38 - w / 15, y - h * 0.5 + 1, w / 15, h / 20, 1);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // License Plate
-    if (plate) {
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(x - 12, y - bodyH * 0.2, 24, 10);
-      ctx.fillStyle = '#000';
-      ctx.font = 'bold 7px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(plate, x, y - bodyH * 0.2 + 8);
+    // Third Brake Light
+    if (isBraking) {
+      ctx.fillStyle = '#ff0000';
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = '#ff0000';
+      ctx.fillRect(x - 15, y - h + 5, 30, 4);
+      ctx.shadowBlur = 0;
     }
+
+    // Exhaust Pipes
+    ctx.fillStyle = '#71717a';
+    ctx.beginPath();
+    ctx.arc(x - w / 4, y - 8, 12, 0, Math.PI * 2);
+    ctx.arc(x + w / 4, y - 8, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#18181b';
+    ctx.beginPath();
+    ctx.arc(x - w / 4, y - 8, 8, 0, Math.PI * 2);
+    ctx.arc(x + w / 4, y - 8, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // License Plate
+    ctx.fillStyle = '#facc15'; // Yellow plate
+    ctx.beginPath();
+    ctx.roundRect(x - 22, y - h * 0.28, 44, 16, 2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('DRIFT', x, y - h * 0.28 + 12);
 
     ctx.restore();
   };
-
-  const drawPine = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    ctx.fillStyle = '#3d2b1f';
-    ctx.fillRect(x - w / 10, y - h * 0.2, w / 5, h * 0.2);
-    ctx.fillStyle = '#064e3b';
-    ctx.beginPath();
-    ctx.moveTo(x, y - h);
-    ctx.lineTo(x - w / 2, y - h * 0.2);
-    ctx.lineTo(x + w / 2, y - h * 0.2);
-    ctx.closePath();
-    ctx.fill();
-  };
-
-  const drawRock = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    ctx.fillStyle = '#475569';
-    ctx.beginPath();
-    ctx.moveTo(x - w / 2, y);
-    ctx.lineTo(x - w / 3, y - h);
-    ctx.lineTo(x + w / 3, y - h * 0.8);
-    ctx.lineTo(x + w / 2, y);
-    ctx.closePath();
-    ctx.fill();
-  };
-
-
 
   const shadeColor = (color: string, percent: number) => {
     let R = parseInt(color.substring(1, 3), 16);
@@ -1535,6 +1485,37 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
       {/* HUD Overlay - Matching Image Style */}
       {isReady ? (
         <div className="absolute inset-0 pointer-events-none p-6 text-white font-sans">
+          {/* Pause Overlay */}
+          {isPaused && (
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-md flex flex-col items-center justify-center z-50 pointer-events-auto">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="text-center space-y-8"
+              >
+                <h2 className="text-7xl font-black italic uppercase tracking-tighter text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.4)]">
+                  Paused
+                </h2>
+                <div className="flex flex-col gap-4 w-72 mx-auto">
+                  <button 
+                    onClick={togglePause}
+                    className="group relative bg-white text-black font-bold py-5 rounded-sm hover:bg-zinc-200 transition-all transform hover:skew-x-[-10deg] active:scale-95 uppercase tracking-widest text-lg"
+                  >
+                    Resume Race
+                    <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/20 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+                  </button>
+                  <button 
+                    onClick={onBack}
+                    className="group relative bg-zinc-900 text-white font-bold py-5 rounded-sm border border-zinc-700 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95 uppercase tracking-widest text-lg"
+                  >
+                    Return to Menu
+                    <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+
           <div className="flex justify-between items-start">
             <div className="space-y-0 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
               <div className="text-xs font-mono text-zinc-400 uppercase tracking-widest">Lap</div>
@@ -1543,51 +1524,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
               </div>
               <div className="text-2xl font-black mt-2">Time: {hud.time.toFixed(2)}</div>
               
-              {mode === 'classic' && (
-                <div className={`text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] ${hud.checkpointTime < 10 ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
-                  TIME: {Math.ceil(hud.checkpointTime)}s
-                </div>
-              )}
-
-              {mode === 'time-trial' && (
-                <div className={`text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] ${hud.time > hud.targetTime ? 'text-red-500' : 'text-cyan-400'}`}>
-                  TARGET: {hud.targetTime}s
-                </div>
-              )}
-
-              {mode === 'elimination' && (
-                <div className="text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] text-red-500 animate-pulse">
-                  ELIMINATION: {Math.ceil(hud.eliminationTimer)}s
-                </div>
-              )}
-
-              {mode === 'drift' && (
-                <div className="text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] text-purple-400">
-                  DRIFT SCORE: {hud.driftScore}
-                </div>
-              )}
-
-              {hud.slipstream && (
-                <motion.div 
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="mt-4 flex items-center gap-2 bg-cyan-500/20 border border-cyan-500/50 px-4 py-2 rounded-sm backdrop-blur-sm"
-                >
-                  <Zap className="w-5 h-5 text-cyan-400 animate-pulse" />
-                  <span className="text-xl font-black italic uppercase tracking-tighter text-cyan-400">Slipstream Boost</span>
-                </motion.div>
-              )}
-
-              {hud.isDrifting && (
-                <motion.div 
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="mt-2 flex items-center gap-2 bg-purple-500/20 border border-purple-500/50 px-4 py-2 rounded-sm backdrop-blur-sm"
-                >
-                  <Gauge className="w-5 h-5 text-purple-400 animate-pulse" />
-                  <span className="text-xl font-black italic uppercase tracking-tighter text-purple-400">Drifting</span>
-                </motion.div>
-              )}
+              <div className={`text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] ${hud.checkpointTime < 10 ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
+                TIME: {Math.ceil(hud.checkpointTime)}s
+              </div>
               
               {isMultiplayer && roomId && (
                 <div className="mt-2 flex items-center gap-2">
@@ -1597,9 +1536,31 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
               )}
               
               {/* Mini Map */}
-              <div className="mt-4 w-40 h-24 border-2 border-white/80 rounded-xl relative overflow-hidden bg-black/30 backdrop-blur-sm">
-                <div className="absolute inset-3 border-2 border-white/40 rounded-lg"></div>
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_red]"></div>
+              <div className="mt-4 w-40 h-28 border-2 border-white/80 rounded-xl relative overflow-hidden bg-black/30 backdrop-blur-sm flex flex-col items-center justify-center p-2">
+                <div className="text-[8px] font-mono text-white/40 uppercase tracking-widest mb-1">Track Map</div>
+                <div className="w-32 h-16 border-2 border-white/10 rounded-full relative">
+                  {/* Player Dot */}
+                  <div 
+                    className="absolute w-3 h-3 bg-red-500 rounded-full shadow-[0_0_10px_red] z-20"
+                    style={{
+                      left: `${50 + 42 * Math.cos(hud.progress * Math.PI * 2 - Math.PI / 2)}%`,
+                      top: `${50 + 42 * Math.sin(hud.progress * Math.PI * 2 - Math.PI / 2)}%`,
+                      transform: 'translate(-50%, -50%)'
+                    }}
+                  />
+                  {/* Opponent Dots */}
+                  {hud.opponents.map((oppProgress, i) => (
+                    <div 
+                      key={i}
+                      className="absolute w-1.5 h-1.5 bg-blue-400 rounded-full opacity-60 z-10"
+                      style={{
+                        left: `${50 + 42 * Math.cos(oppProgress * Math.PI * 2 - Math.PI / 2)}%`,
+                        top: `${50 + 42 * Math.sin(oppProgress * Math.PI * 2 - Math.PI / 2)}%`,
+                        transform: 'translate(-50%, -50%)'
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -1650,59 +1611,50 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
                   ></div>
                 </div>
               </div>
+
+              <div className="flex items-center gap-4">
+                <span className={`text-2xl font-black uppercase italic tracking-tighter transition-colors ${hud.turbo >= 100 ? 'text-yellow-400 animate-pulse' : 'text-white'}`}>
+                  {hud.turbo >= 100 ? 'Turbo Ready' : 'Turbo'}
+                </span>
+                <div className="w-56 h-6 bg-black/50 border-2 border-white/80 p-0.5 relative">
+                  <div 
+                    className={`h-full transition-all duration-100 ${hud.turbo >= 100 ? 'bg-yellow-400 shadow-[0_0_15px_#facc15]' : 'bg-white shadow-[0_0_10px_white]'}`} 
+                    style={{ width: `${hud.turbo}%` }}
+                  ></div>
+                  {/* Charge Indicator */}
+                  {hud.turbo < 100 && (
+                    <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold uppercase tracking-tighter opacity-50">
+                      Hold Shift to Charge
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Bottom HUD - Dashboard Style */}
-          <div className="absolute bottom-12 left-12 right-12 flex justify-between items-end pointer-events-none">
-            {/* Bottom Left: Turbo Meter */}
-            <div className="flex flex-col items-start drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">
-              <div className="flex items-center gap-3 mb-1">
-                <Zap className={`w-5 h-5 ${hud.turbo >= 100 ? 'text-yellow-400 fill-yellow-400 animate-pulse' : 'text-zinc-400'}`} />
-                <span className={`text-xl font-black uppercase italic tracking-tighter transition-colors ${hud.turbo >= 100 ? 'text-yellow-400 animate-pulse' : 'text-white'}`}>
-                  {hud.turbo >= 100 ? 'Turbo Ready' : 'Turbo'}
-                </span>
-              </div>
-              <div className="w-64 h-4 bg-black/60 border-2 border-white/60 p-0.5 relative overflow-hidden">
-                <motion.div 
-                  initial={false}
-                  animate={{ width: `${hud.turbo}%` }}
-                  className={`h-full transition-all duration-100 ${hud.turbo >= 100 ? 'bg-yellow-400 shadow-[0_0_15px_#facc15]' : 'bg-white shadow-[0_0_10px_white]'}`} 
-                />
-                {hud.turbo < 100 && (
-                  <div className="absolute inset-0 flex items-center justify-center text-[8px] font-bold uppercase tracking-widest opacity-40">
-                    Hold Shift to Charge
-                  </div>
-                )}
-              </div>
+          <div className="absolute bottom-12 right-12 text-right drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">
+            {hud.slipstream && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: [0.4, 1, 0.4], scale: 1 }}
+                transition={{ repeat: Infinity, duration: 1 }}
+                className="text-blue-400 font-black italic text-2xl mb-2 tracking-tighter flex items-center justify-end gap-2"
+              >
+                <Zap className="w-6 h-6 fill-blue-400" />
+                SLIPSTREAMING
+              </motion.div>
+            )}
+            <div className="text-8xl font-black italic tracking-tighter">
+              {hud.speed}
+              <span className="text-2xl ml-3 not-italic font-bold opacity-90">MPH</span>
             </div>
-
-            {/* Bottom Right: Speed & Position */}
-            <div className="text-right drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">
-              {hud.slipstream && (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: [0.4, 1, 0.4], scale: 1 }}
-                  transition={{ repeat: Infinity, duration: 1 }}
-                  className="text-blue-400 font-black italic text-xl mb-1 tracking-tighter flex items-center justify-end gap-2"
-                >
-                  <Zap className="w-5 h-5 fill-blue-400" />
-                  SLIPSTREAM
-                </motion.div>
-              )}
-              <div className="flex items-end justify-end gap-4">
-                <div className="text-8xl font-black italic tracking-tighter leading-none">
-                  {hud.speed}
-                  <span className="text-2xl ml-2 not-italic font-bold opacity-70">MPH</span>
-                </div>
-                {hud.leaderboard && hud.leaderboard.length > 0 && (
-                  <div className="text-6xl font-black italic tracking-tighter text-emerald-400 mb-1">
-                    <span className="text-2xl not-italic font-bold opacity-70 mr-1">P</span>
-                    {hud.leaderboard.findIndex((r: any) => r.isPlayer) + 1}
-                  </div>
-                )}
+            {hud.leaderboard && hud.leaderboard.length > 0 && (
+              <div className="text-6xl font-black italic tracking-tighter mt-2 text-emerald-400">
+                <span className="text-2xl not-italic font-bold opacity-90 mr-2">POS</span>
+                {hud.leaderboard.findIndex((r: any) => r.isPlayer) + 1}
+                <span className="text-2xl not-italic font-bold opacity-90 ml-1">/ {hud.leaderboard.length}</span>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Mobile Controls */}
@@ -1837,6 +1789,116 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, onRaceEnd, onBack
                       {w}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Body Color</label>
+                <div className="flex gap-2">
+                  {['#4ade80', '#ef4444', '#3b82f6', '#facc15', '#ffffff', '#18181b'].map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setCarConfig(prev => ({ ...prev, color: c }))}
+                      className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${carConfig.color === c ? 'border-white scale-110' : 'border-transparent'}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Spoiler</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['none', 'small', 'large'] as const).map(s => (
+                    <button
+                      key={s}
+                      onClick={() => setCarConfig(prev => ({ ...prev, spoiler: s }))}
+                      className={`py-2 text-[10px] font-bold uppercase border transition-colors ${carConfig.spoiler === s ? 'bg-white text-black border-white' : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500'}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Decals</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['none', 'stripes', 'racing-number'] as const).map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setCarConfig(prev => ({ ...prev, decal: d }))}
+                      className={`py-2 text-[10px] font-bold uppercase border transition-colors ${carConfig.decal === d ? 'bg-white text-black border-white' : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500'}`}
+                    >
+                      {d.replace('-', ' ')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Rims</label>
+                <div className="flex gap-2">
+                  {['#ffffff', '#000000', '#facc15', '#ef4444'].map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setCarConfig(prev => ({ ...prev, rims: c }))}
+                      className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${carConfig.rims === c ? 'border-white scale-110' : 'border-transparent'}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-4 border-t border-zinc-800">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Performance Upgrades</h3>
+                
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold uppercase text-zinc-400">Engine Stage</label>
+                    <span className="text-[10px] font-mono text-emerald-500">S{carConfig.engine}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[1, 2, 3].map(lvl => (
+                      <button
+                        key={lvl}
+                        onClick={() => setCarConfig(prev => ({ ...prev, engine: lvl }))}
+                        className={`h-1 transition-colors ${carConfig.engine >= lvl ? 'bg-emerald-500' : 'bg-zinc-800'}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold uppercase text-zinc-400">Tire Compound</label>
+                    <span className="text-[10px] font-mono text-emerald-500">S{carConfig.tires}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[1, 2, 3].map(lvl => (
+                      <button
+                        key={lvl}
+                        onClick={() => setCarConfig(prev => ({ ...prev, tires: lvl }))}
+                        className={`h-1 transition-colors ${carConfig.tires >= lvl ? 'bg-emerald-500' : 'bg-zinc-800'}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold uppercase text-zinc-400">Turbo System</label>
+                    <span className="text-[10px] font-mono text-emerald-500">S{carConfig.turbo}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[1, 2, 3].map(lvl => (
+                      <button
+                        key={lvl}
+                        onClick={() => setCarConfig(prev => ({ ...prev, turbo: lvl }))}
+                        className={`h-1 transition-colors ${carConfig.turbo >= lvl ? 'bg-emerald-500' : 'bg-zinc-800'}`}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

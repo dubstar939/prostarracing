@@ -1,10 +1,10 @@
 
 export class GameAudio {
   private ctx: AudioContext | null = null;
-  private engineOsc: OscillatorNode | null = null;
-  private engineGain: GainNode | null = null;
-  private driftOsc: OscillatorNode | null = null;
-  private driftGain: GainNode | null = null;
+  private engineAudio: HTMLAudioElement | null = null;
+  private driftAudio: HTMLAudioElement | null = null;
+  private turboAudio: HTMLAudioElement | null = null;
+  private collisionAudio: HTMLAudioElement | null = null;
   private music: HTMLAudioElement | null = null;
   private isMuted: boolean = false;
   private initialized: boolean = false;
@@ -15,89 +15,74 @@ export class GameAudio {
 
   public init() {
     if (this.initialized) return;
-    this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     
-    // Engine Sound
-    this.engineOsc = this.ctx.createOscillator();
-    this.engineOsc.type = 'sawtooth';
-    this.engineGain = this.ctx.createGain();
-    this.engineGain.gain.value = 0;
-    this.engineOsc.connect(this.engineGain);
-    this.engineGain.connect(this.ctx.destination);
-    this.engineOsc.start();
+    // Engine Sound - Loopable high-quality engine
+    this.engineAudio = new Audio('https://cdn.pixabay.com/audio/2022/03/15/audio_884d974478.mp3');
+    this.engineAudio.loop = true;
+    this.engineAudio.volume = 0;
 
-    // Drift Sound (Noise)
-    this.driftGain = this.ctx.createGain();
-    this.driftGain.gain.value = 0;
-    this.driftGain.connect(this.ctx.destination);
-    
-    // Create noise buffer for drift
-    const bufferSize = 2 * this.ctx.sampleRate;
-    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = Math.random() * 2 - 1;
-    }
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = noiseBuffer;
-    noise.loop = true;
-    noise.connect(this.driftGain);
-    noise.start();
+    // Drift Sound
+    this.driftAudio = new Audio('https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a0a0a0.mp3');
+    this.driftAudio.loop = true;
+    this.driftAudio.volume = 0;
+
+    // Turbo Sound
+    this.turboAudio = new Audio('https://cdn.pixabay.com/audio/2021/08/04/audio_12b5443d3a.mp3');
+    this.turboAudio.volume = 0.4;
+
+    // Collision Sound
+    this.collisionAudio = new Audio('https://cdn.pixabay.com/audio/2022/03/10/audio_730626391d.mp3');
+    this.collisionAudio.volume = 0.5;
 
     // Background Music
-    this.music = new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'); // Placeholder upbeat track
+    this.music = new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3');
     this.music.loop = true;
-    this.music.volume = 0.3;
+    this.music.volume = 0.2;
 
     this.initialized = true;
   }
 
   public update(speedPercent: number, isDrifting: boolean, isBraking: boolean) {
-    if (!this.initialized || !this.ctx || this.isMuted) return;
+    if (!this.initialized || this.isMuted) return;
 
-    // Update Engine Pitch
-    if (this.engineOsc && this.engineGain) {
-      const baseFreq = 50;
-      const targetFreq = baseFreq + (speedPercent * 150);
-      this.engineOsc.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.1);
-      this.engineGain.gain.setTargetAtTime(0.1 + (speedPercent * 0.1), this.ctx.currentTime, 0.1);
+    // Update Engine Sound
+    if (this.engineAudio) {
+      if (this.engineAudio.paused) {
+        this.engineAudio.play().catch(() => {});
+      }
+      // Pitch shifting engine based on speed
+      this.engineAudio.playbackRate = 0.5 + (speedPercent * 1.5);
+      this.engineAudio.volume = 0.1 + (speedPercent * 0.4);
     }
 
     // Update Drift/Brake Sound
-    if (this.driftGain) {
-      const targetGain = (isDrifting || (isBraking && speedPercent > 0.1)) ? 0.15 : 0;
-      this.driftGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.1);
+    if (this.driftAudio) {
+      const shouldPlayDrift = isDrifting || (isBraking && speedPercent > 0.2);
+      if (shouldPlayDrift) {
+        if (this.driftAudio.paused) {
+          this.driftAudio.play().catch(() => {});
+        }
+        this.driftAudio.volume = 0.3;
+      } else {
+        this.driftAudio.volume = 0;
+        if (!this.driftAudio.paused) {
+          this.driftAudio.pause();
+        }
+      }
     }
   }
 
   public playCollision(impact: number) {
-    if (!this.initialized || !this.ctx || this.isMuted) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(100, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
-    gain.gain.setValueAtTime(impact * 0.5, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.2);
+    if (!this.initialized || this.isMuted || !this.collisionAudio) return;
+    const sound = this.collisionAudio.cloneNode() as HTMLAudioElement;
+    sound.volume = Math.min(1, impact * 2);
+    sound.play().catch(() => {});
   }
 
   public playTurbo() {
-    if (!this.initialized || !this.ctx || this.isMuted) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(200, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.5);
-    gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.5);
+    if (!this.initialized || this.isMuted || !this.turboAudio) return;
+    const sound = this.turboAudio.cloneNode() as HTMLAudioElement;
+    sound.play().catch(() => {});
   }
 
   public startMusic() {
@@ -115,8 +100,8 @@ export class GameAudio {
   public toggleMute() {
     this.isMuted = !this.isMuted;
     if (this.isMuted) {
-      if (this.engineGain) this.engineGain.gain.value = 0;
-      if (this.driftGain) this.driftGain.gain.value = 0;
+      if (this.engineAudio) this.engineAudio.volume = 0;
+      if (this.driftAudio) this.driftAudio.volume = 0;
       this.stopMusic();
     } else {
       this.startMusic();
