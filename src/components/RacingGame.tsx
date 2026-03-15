@@ -76,6 +76,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
   const [aspectRatio, setAspectRatio] = useState<'4:3' | '16:9'>('4:3');
   const isPausedRef = useRef(false);
   const keysRef = useRef<{ [key: string]: boolean }>({});
+  const tiltRef = useRef<number>(0);
+  const [useTilt, setUseTilt] = useState(false);
   const cityscapeRef = useRef<any[]>([]);
   const [isMobile, setIsMobile] = useState(false);
   const [checkpointNotify, setCheckpointNotify] = useState(false);
@@ -209,8 +211,19 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => keysRef.current[e.code] = false;
+    
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+      if (!useTilt) return;
+      // gamma is the left-to-right tilt in degrees, where right is positive
+      let tilt = e.gamma || 0;
+      // Clamp tilt to -30 to 30 degrees and normalize to -1 to 1
+      tilt = Math.max(-30, Math.min(30, tilt)) / 30;
+      tiltRef.current = tilt;
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('deviceorientation', handleOrientation);
 
     // Track Generation
     const addSegment = (curve: number, y: number) => {
@@ -524,6 +537,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
 
       if (keysRef.current['ArrowLeft'] || keysRef.current['KeyA']) playerX -= dt * handlingResponse * driftFactor * speedPercent * grip;
       if (keysRef.current['ArrowRight'] || keysRef.current['KeyD']) playerX += dt * handlingResponse * driftFactor * speedPercent * grip;
+      
+      if (useTilt && Math.abs(tiltRef.current) > 0.1) {
+        playerX += dt * handlingResponse * driftFactor * speedPercent * grip * tiltRef.current * 2.5;
+      }
 
       // Off-road penalty
       if ((playerX < -1) || (playerX > 1)) {
@@ -1313,13 +1330,27 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     bodyGrad.addColorStop(1, shadeColor(config.color, -40));
     ctx.fillStyle = bodyGrad;
     
+    // Body Kit Modifications
+    let bodyWidthMultiplier = 1;
+    if (config.bodyKit === 'racing') bodyWidthMultiplier = 1.1;
+    if (config.bodyKit === 'extreme') bodyWidthMultiplier = 1.2;
+
+    const currentW = w * bodyWidthMultiplier;
+
     ctx.beginPath();
-    ctx.moveTo(x - w / 2, y - h * 0.1);
-    ctx.bezierCurveTo(x - w / 2, y - h * 0.4, x - w * 0.48, y - h * 0.6, x - w * 0.48, y - h * 0.6);
-    ctx.lineTo(x + w * 0.48, y - h * 0.6);
-    ctx.bezierCurveTo(x + w * 0.48, y - h * 0.6, x + w / 2, y - h * 0.4, x + w / 2, y - h * 0.1);
+    ctx.moveTo(x - currentW / 2, y - h * 0.1);
+    ctx.bezierCurveTo(x - currentW / 2, y - h * 0.4, x - currentW * 0.48, y - h * 0.6, x - currentW * 0.48, y - h * 0.6);
+    ctx.lineTo(x + currentW * 0.48, y - h * 0.6);
+    ctx.bezierCurveTo(x + currentW * 0.48, y - h * 0.6, x + currentW / 2, y - h * 0.4, x + currentW / 2, y - h * 0.1);
     ctx.closePath();
     ctx.fill();
+
+    // Side Skirts (Body Kit)
+    if (config.bodyKit !== 'stock') {
+      ctx.fillStyle = '#111';
+      ctx.fillRect(x - currentW / 2 - 5, y - h * 0.15, 10, h * 0.1);
+      ctx.fillRect(x + currentW / 2 - 5, y - h * 0.15, 10, h * 0.1);
+    }
 
     // Body Highlight (Top edge of widebody)
     ctx.strokeStyle = 'rgba(255,255,255,0.2)';
@@ -1329,16 +1360,16 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     // Rear Diffuser / Bumper
     ctx.fillStyle = '#0a0a0a';
     ctx.beginPath();
-    ctx.roundRect(x - w / 2, y - h * 0.18, w, h * 0.18, 5);
+    ctx.roundRect(x - currentW / 2, y - h * 0.18, currentW, h * 0.18, 5);
     ctx.fill();
 
     // Car Body - Upper (Tapered Sports Cabin with Curves)
     ctx.fillStyle = shadeColor(config.color, -15);
     ctx.beginPath();
-    ctx.moveTo(x - w * 0.42, y - h * 0.6);
-    ctx.bezierCurveTo(x - w * 0.38, y - h * 0.85, x - w * 0.32, y - h, x - w * 0.32, y - h);
-    ctx.lineTo(x + w * 0.32, y - h);
-    ctx.bezierCurveTo(x + w * 0.32, y - h, x + w * 0.38, y - h * 0.85, x + w * 0.42, y - h * 0.6);
+    ctx.moveTo(x - currentW * 0.42, y - h * 0.6);
+    ctx.bezierCurveTo(x - currentW * 0.38, y - h * 0.85, x - currentW * 0.32, y - h, x - currentW * 0.32, y - h);
+    ctx.lineTo(x + currentW * 0.32, y - h);
+    ctx.bezierCurveTo(x + currentW * 0.32, y - h, x + currentW * 0.38, y - h * 0.85, x + currentW * 0.42, y - h * 0.6);
     ctx.closePath();
     ctx.fill();
 
@@ -1352,18 +1383,34 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     // Decals
     if (config.decal === 'stripes') {
       ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.fillRect(x - w / 10, y - h, w / 20, h);
-      ctx.fillRect(x + w / 20, y - h, w / 20, h);
+      ctx.fillRect(x - currentW / 10, y - h, currentW / 20, h);
+      ctx.fillRect(x + currentW / 20, y - h, currentW / 20, h);
     } else if (config.decal === 'racing-number') {
       ctx.fillStyle = 'white';
       ctx.beginPath();
-      ctx.arc(x, y - h * 0.45, w / 6, 0, Math.PI * 2);
+      ctx.arc(x, y - h * 0.45, currentW / 6, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = 'black';
       ctx.font = `bold ${h / 5}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('86', x, y - h * 0.45);
+    } else if (config.decal === 'flames') {
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.moveTo(x - currentW * 0.4, y - h * 0.3);
+      ctx.quadraticCurveTo(x - currentW * 0.2, y - h * 0.5, x, y - h * 0.3);
+      ctx.quadraticCurveTo(x + currentW * 0.2, y - h * 0.5, x + currentW * 0.4, y - h * 0.3);
+      ctx.fill();
+    } else if (config.decal === 'tribal') {
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x - currentW * 0.3, y - h * 0.4);
+      ctx.lineTo(x - currentW * 0.1, y - h * 0.2);
+      ctx.lineTo(x + currentW * 0.1, y - h * 0.4);
+      ctx.lineTo(x + currentW * 0.3, y - h * 0.2);
+      ctx.stroke();
     }
 
     // Rear Window (Blue Reflection)
@@ -1578,6 +1625,15 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
             </div>
             
             <div className="flex items-center gap-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
+              <button 
+                onClick={() => setUseTilt(!useTilt)}
+                className={`p-2 border rounded-sm transition-all pointer-events-auto flex items-center gap-2 ${useTilt ? 'bg-cyan-500 border-cyan-400 text-white shadow-[0_0_10px_rgba(6,182,212,0.5)]' : 'bg-black/50 border-white/40 text-white/70 hover:bg-white/10'}`}
+                title="Toggle Tilt Controls"
+              >
+                <Monitor className={`w-5 h-5 ${useTilt ? 'animate-pulse' : ''}`} />
+                <span className="text-[10px] font-bold uppercase tracking-tighter">{useTilt ? 'Tilt On' : 'Tilt Off'}</span>
+              </button>
+
               <button 
                 onClick={toggleAspectRatio}
                 className="p-2 bg-black/50 border border-white/40 rounded-sm hover:bg-white/10 transition-colors pointer-events-auto flex items-center gap-2"

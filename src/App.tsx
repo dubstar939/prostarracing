@@ -54,8 +54,10 @@ function useCoverImage() {
   return coverImage;
 }
 
+import Garage from './components/Garage';
+
 export default function App() {
-  const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'options' | 'mode-select'>('title');
+  const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'options' | 'mode-select' | 'garage'>('title');
   const [level, setLevel] = useState(() => {
     const saved = localStorage.getItem('racing_level');
     return saved ? parseInt(saved, 10) : 1;
@@ -72,6 +74,7 @@ export default function App() {
       spoiler: 'small',
       rims: 'silver',
       decal: 'none',
+      bodyKit: 'stock',
       engine: 1,
       tires: 1,
       turbo: 1
@@ -230,6 +233,15 @@ export default function App() {
                 <Play className="w-6 h-6 fill-current" />
                 <span className="uppercase tracking-tight text-xl">Start Game</span>
                 <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/20 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+              </button>
+
+              <button
+                onClick={() => setGameState('garage')}
+                className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+              >
+                <ShoppingBag className="w-6 h-6 text-emerald-400" />
+                <span className="uppercase tracking-tight text-xl">The Garage</span>
+                <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
               </button>
 
               <button
@@ -451,6 +463,16 @@ export default function App() {
               roomId={roomId}
             />
           </motion.div>
+        )}
+
+        {gameState === 'garage' && (
+          <Garage 
+            carConfig={carConfig}
+            setCarConfig={setCarConfig}
+            money={money}
+            setMoney={setMoney}
+            onBack={() => setGameState('menu')}
+          />
         )}
 
         {gameState === 'gameover' && (
