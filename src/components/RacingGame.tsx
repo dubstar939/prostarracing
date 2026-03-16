@@ -4,8 +4,9 @@ import { audioManager } from '../services/audioService';
 import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Zap, Monitor } from 'lucide-react';
 
 import { socketService } from '../services/socketService';
+import { drawCar, shadeColor } from '../utils/carRenderer';
 
-import { CarConfig, RaceMode } from '../types';
+import { CarConfig, RaceMode, PERFORMANCE_PARTS } from '../types';
 
 export type TrackThemeType = 'city' | 'desert' | 'mountain';
 
@@ -151,7 +152,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       ctx.ellipse(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 100, 300, 100, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      drawPlayerCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 150, 300, 180, carConfig, false, 0, 0);
+      drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 150, 300, 180, carConfig, false, 0, 0);
       return;
     }
 
@@ -172,9 +173,15 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     let driftAngle = 0;
     const totalLaps = 2;
     
-    const maxSpeed = 15000 + (carConfig.engine - 1) * 2000;
-    const accel = maxSpeed / 4; // Faster acceleration
-    const breaking = -maxSpeed * 2.5; // Stronger braking
+    const engineBoost = PERFORMANCE_PARTS.engine.find(p => p.level === carConfig.engine)?.boost || 0;
+    const turboAccel = PERFORMANCE_PARTS.turbo.find(p => p.level === carConfig.turbo)?.accel || 0;
+    const tireGrip = PERFORMANCE_PARTS.tires.find(p => p.level === carConfig.tires)?.grip || 0;
+
+    const baseMaxSpeed = 15000;
+    const maxSpeed = baseMaxSpeed + (engineBoost * 150);
+    const baseAccel = maxSpeed / 4;
+    const accel = baseAccel + (turboAccel * 100);
+    const breaking = -maxSpeed * 2.5;
     const decel = -maxSpeed / 4;
     const offRoadDecel = -maxSpeed / 1.5;
     const offRoadLimit = maxSpeed / 3;
@@ -521,7 +528,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       }
 
       // Controls
-      const grip = (weather === 'rain' ? 0.65 : 1.0) + (carConfig.tires - 1) * 0.12;
+      const grip = (weather === 'rain' ? 0.65 : 1.0) + (tireGrip / 100);
       const slipstreamBoost = isSlipstreaming ? 1.25 : 1.0;
       const driftFactor = isDrifting ? 3.2 : 1.0;
       const driftSlowdown = isDrifting ? 0.985 : 1.0;
@@ -791,6 +798,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
 
       let x = 0;
       let dx = -(baseSegment.curve * basePercent);
+      let maxY = SCREEN_HEIGHT;
 
       // Render Road
       for (let n = 0; n < DRAW_DISTANCE; n++) {
@@ -802,7 +810,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         x += dx;
         dx += segment.curve;
 
-        if (segment.p1.screen.y <= segment.p2.screen.y || segment.p2.screen.y >= SCREEN_HEIGHT) continue;
+        // Clip segments that are behind a hill (their projected Y is below the highest drawn point, meaning a larger Y value)
+        // Also skip if it's behind the camera (p1.screen.y >= p2.screen.y)
+        if (segment.p1.screen.y <= segment.p2.screen.y || segment.p2.screen.y >= maxY) continue;
 
         // Draw Grass (with gradient)
         const grassGrad = ctx.createLinearGradient(0, segment.p2.screen.y, 0, segment.p1.screen.y);
@@ -873,6 +883,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
           const l2 = segment.p2.screen.w / 40;
           drawPolygon(ctx, segment.p1.screen.x, segment.p1.screen.y, l1, segment.p2.screen.x, segment.p2.screen.y, l2, segment.color.lane);
         }
+
+        maxY = segment.p1.screen.y;
       }
 
       // Render Sprites (Trees and Opponents)
@@ -910,7 +922,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
               const screenW = Math.round(scale * CAR_WIDTH * SCREEN_WIDTH / 2);
               const screenH = screenW * 0.6;
               
-              drawOpponentCar(ctx, screenX, screenY, screenW, screenH, player.carConfig.color, player.id.substring(0, 4));
+              drawCar(ctx, screenX, screenY, screenW, screenH, player.carConfig, true, 0, 0);
             }
           }
         });
@@ -922,7 +934,19 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
             const oppY = segment.p1.screen.y;
             const oppW = (segment.p1.screen.w * (CAR_WIDTH / ROAD_WIDTH));
             const oppH = oppW * 0.6;
-            drawOpponentCar(ctx, oppX, oppY, oppW, oppH, opp.color, opp.plate);
+            
+            const oppConfig: CarConfig = {
+              model: 'speedster',
+              color: opp.color,
+              spoiler: 'none',
+              rims: 'silver',
+              decal: 'none',
+              bodyKit: 'stock',
+              engine: 1,
+              tires: 1,
+              turbo: 1
+            };
+            drawCar(ctx, oppX, oppY, oppW, oppH, oppConfig, true, 0, 0);
           }
         });
       }
@@ -955,7 +979,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       });
       ctx.globalAlpha = 1.0;
 
-      drawPlayerCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 180, 110, carConfig, isBraking, damage, driftAngle);
+      drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 180, 110, carConfig, isBraking, damage, driftAngle);
 
       // Rain Rendering
       if (weather === 'rain') {
@@ -1140,383 +1164,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     drawFoliage(x - w * 0.4, y - h * 0.5, w * 0.6, '#15803d');
     drawFoliage(x + w * 0.4, y - h * 0.5, w * 0.6, '#15803d');
     drawFoliage(x, y - h * 0.9, w * 0.5, '#22c55e');
-  };
-
-  const drawOpponentCar = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, plate: string) => {
-    ctx.save();
-    
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath();
-    ctx.ellipse(x, y, w * 0.6, h * 0.2, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Wheels (Ellipses for 3D look)
-    ctx.fillStyle = '#111';
-    ctx.beginPath();
-    ctx.ellipse(x - w * 0.4, y - h * 0.15, w * 0.1, h * 0.15, 0, 0, Math.PI * 2);
-    ctx.ellipse(x + w * 0.4, y - h * 0.15, w * 0.1, h * 0.15, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Side Mirrors
-    ctx.fillStyle = shadeColor(color, -20);
-    ctx.fillRect(x - w * 0.48, y - h * 0.65, w * 0.08, h * 0.1);
-    ctx.fillRect(x + w * 0.4, y - h * 0.65, w * 0.08, h * 0.1);
-
-    // Spoiler
-    ctx.fillStyle = '#222';
-    ctx.fillRect(x - w / 2, y - h - 10, w, 6); // Wing
-    ctx.fillRect(x - w * 0.35, y - h - 10, 3, 10); // Left mount
-    ctx.fillRect(x + w * 0.35 - 3, y - h - 10, 3, 10); // Right mount
-
-    // Car Body - Lower (Flared)
-    const gradient = ctx.createLinearGradient(x, y - h, x, y);
-    gradient.addColorStop(0, color);
-    gradient.addColorStop(1, shadeColor(color, -30));
-    ctx.fillStyle = gradient;
-    
-    ctx.beginPath();
-    ctx.moveTo(x - w / 2, y - h * 0.1);
-    ctx.bezierCurveTo(x - w / 2, y - h * 0.4, x - w * 0.45, y - h * 0.6, x - w * 0.45, y - h * 0.6);
-    ctx.lineTo(x + w * 0.45, y - h * 0.6);
-    ctx.bezierCurveTo(x + w * 0.45, y - h * 0.6, x + w / 2, y - h * 0.4, x + w / 2, y - h * 0.1);
-    ctx.closePath();
-    ctx.fill();
-
-    // Car Body - Upper (Tapered Cabin)
-    ctx.fillStyle = shadeColor(color, -10);
-    ctx.beginPath();
-    ctx.moveTo(x - w * 0.4, y - h * 0.6);
-    ctx.bezierCurveTo(x - w * 0.35, y - h * 0.8, x - w * 0.3, y - h, x - w * 0.3, y - h);
-    ctx.lineTo(x + w * 0.3, y - h);
-    ctx.bezierCurveTo(x + w * 0.3, y - h, x + w * 0.35, y - h * 0.8, x + w * 0.4, y - h * 0.6);
-    ctx.closePath();
-    ctx.fill();
-
-    // Rear Window
-    ctx.fillStyle = '#1e293b';
-    ctx.beginPath();
-    ctx.moveTo(x - w * 0.25, y - h + 5);
-    ctx.lineTo(x + w * 0.25, y - h + 5);
-    ctx.lineTo(x + w * 0.35, y - h * 0.6 - 5);
-    ctx.lineTo(x - w * 0.35, y - h * 0.6 - 5);
-    ctx.closePath();
-    ctx.fill();
-
-    // Tail Lights
-    ctx.fillStyle = '#ef4444';
-    ctx.shadowBlur = 5;
-    ctx.shadowColor = '#ef4444';
-    ctx.beginPath();
-    ctx.roundRect(x - w * 0.42, y - h * 0.5, w / 5, h / 10, 2);
-    ctx.roundRect(x + w * 0.42 - w / 5, y - h * 0.5, w / 5, h / 10, 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // License Plate
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(x - 12, y - h * 0.2, 24, 10);
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 7px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(plate, x, y - h * 0.2 + 8);
-
-    ctx.restore();
-  };
-
-  const drawPlayerCar = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: any, isBraking: boolean, damage: number = 0, driftAngle: number = 0) => {
-    ctx.save();
-
-    // Apply Drift Tilt
-    ctx.translate(x, y);
-    ctx.rotate(driftAngle);
-    ctx.translate(-x, -y);
-
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.beginPath();
-    ctx.ellipse(x, y + 5, w * 0.7, h * 0.25, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Smoke if damaged
-    if (damage > 50) {
-      ctx.fillStyle = `rgba(100, 100, 100, ${(damage - 50) / 100})`;
-      for (let i = 0; i < 3; i++) {
-        ctx.beginPath();
-        ctx.arc(x + (Math.random() - 0.5) * 40, y - h + Math.random() * 20, 10 + Math.random() * 10, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    // Wheels (Flared Arches with 3D Ellipses)
-    ctx.fillStyle = '#000';
-    ctx.beginPath();
-    ctx.ellipse(x - w * 0.45, y - h * 0.2, w * 0.12, h * 0.2, 0, 0, Math.PI * 2);
-    ctx.ellipse(x + w * 0.45, y - h * 0.2, w * 0.12, h * 0.2, 0, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Rims
-    ctx.fillStyle = config.rims;
-    ctx.beginPath();
-    ctx.ellipse(x - w * 0.45, y - h * 0.2, w * 0.06, h * 0.1, 0, 0, Math.PI * 2);
-    ctx.ellipse(x + w * 0.45, y - h * 0.2, w * 0.06, h * 0.1, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Side Mirrors
-    ctx.fillStyle = shadeColor(config.color, -30);
-    ctx.beginPath();
-    ctx.roundRect(x - w * 0.52, y - h * 0.65, w * 0.1, h * 0.12, 3);
-    ctx.roundRect(x + w * 0.42, y - h * 0.65, w * 0.1, h * 0.12, 3);
-    ctx.fill();
-
-    // Spoiler
-    if (config.spoiler !== 'none') {
-      ctx.fillStyle = '#111';
-      
-      if (config.spoiler === 'small') {
-        // Low-profile Lip / Ducktail Spoiler
-        const wingWidth = w * 0.9;
-        const wingHeight = 8;
-        ctx.beginPath();
-        ctx.moveTo(x - wingWidth / 2, y - h);
-        ctx.lineTo(x + wingWidth / 2, y - h);
-        ctx.lineTo(x + wingWidth / 2 + 5, y - h - wingHeight);
-        ctx.lineTo(x - wingWidth / 2 - 5, y - h - wingHeight);
-        ctx.closePath();
-        ctx.fill();
-        
-        // Subtle shading
-        ctx.fillStyle = 'rgba(255,255,255,0.1)';
-        ctx.fillRect(x - wingWidth / 2, y - h - wingHeight, wingWidth, 2);
-      } else if (config.spoiler === 'large') {
-        // Aggressive GT Wing with Swan-neck mounts
-        const wingWidth = w + 50;
-        const wingHeight = 32;
-        
-        // Wing Main (Aerodynamic Curve)
-        ctx.fillStyle = '#0a0a0a';
-        ctx.beginPath();
-        ctx.moveTo(x - wingWidth / 2, y - h - wingHeight);
-        ctx.quadraticCurveTo(x, y - h - wingHeight - 5, x + wingWidth / 2, y - h - wingHeight);
-        ctx.lineTo(x + wingWidth / 2, y - h - wingHeight + 6);
-        ctx.quadraticCurveTo(x, y - h - wingHeight + 1, x - wingWidth / 2, y - h - wingHeight + 6);
-        ctx.closePath();
-        ctx.fill();
-        
-        // End Plates (Aerodynamic Shape)
-        ctx.fillStyle = '#111';
-        ctx.beginPath();
-        ctx.roundRect(x - wingWidth / 2 - 2, y - h - wingHeight - 8, 6, 20, 2);
-        ctx.roundRect(x + wingWidth / 2 - 4, y - h - wingHeight - 8, 6, 20, 2);
-        ctx.fill();
-
-        // Swan-neck Mounts (More realistic)
-        ctx.strokeStyle = '#111';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        // Left mount
-        ctx.moveTo(x - w * 0.2, y - h + 5);
-        ctx.quadraticCurveTo(x - w * 0.25, y - h - wingHeight / 2, x - w * 0.15, y - h - wingHeight);
-        // Right mount
-        ctx.moveTo(x + w * 0.2, y - h + 5);
-        ctx.quadraticCurveTo(x + w * 0.25, y - h - wingHeight / 2, x + w * 0.15, y - h - wingHeight);
-        ctx.stroke();
-      }
-    }
-
-    // Car Body - Lower (Aggressive Widebody Curves)
-    const bodyGrad = ctx.createLinearGradient(x, y - h, x, y);
-    bodyGrad.addColorStop(0, config.color);
-    bodyGrad.addColorStop(1, shadeColor(config.color, -40));
-    ctx.fillStyle = bodyGrad;
-    
-    // Body Kit Modifications
-    let bodyWidthMultiplier = 1;
-    if (config.bodyKit === 'racing') bodyWidthMultiplier = 1.1;
-    if (config.bodyKit === 'extreme') bodyWidthMultiplier = 1.2;
-
-    const currentW = w * bodyWidthMultiplier;
-
-    ctx.beginPath();
-    ctx.moveTo(x - currentW / 2, y - h * 0.1);
-    ctx.bezierCurveTo(x - currentW / 2, y - h * 0.4, x - currentW * 0.48, y - h * 0.6, x - currentW * 0.48, y - h * 0.6);
-    ctx.lineTo(x + currentW * 0.48, y - h * 0.6);
-    ctx.bezierCurveTo(x + currentW * 0.48, y - h * 0.6, x + currentW / 2, y - h * 0.4, x + currentW / 2, y - h * 0.1);
-    ctx.closePath();
-    ctx.fill();
-
-    // Side Skirts (Body Kit)
-    if (config.bodyKit !== 'stock') {
-      ctx.fillStyle = '#111';
-      ctx.fillRect(x - currentW / 2 - 5, y - h * 0.15, 10, h * 0.1);
-      ctx.fillRect(x + currentW / 2 - 5, y - h * 0.15, 10, h * 0.1);
-    }
-
-    // Body Highlight (Top edge of widebody)
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Rear Diffuser / Bumper
-    ctx.fillStyle = '#0a0a0a';
-    ctx.beginPath();
-    ctx.roundRect(x - currentW / 2, y - h * 0.18, currentW, h * 0.18, 5);
-    ctx.fill();
-
-    // Car Body - Upper (Tapered Sports Cabin with Curves)
-    ctx.fillStyle = shadeColor(config.color, -15);
-    ctx.beginPath();
-    ctx.moveTo(x - currentW * 0.42, y - h * 0.6);
-    ctx.bezierCurveTo(x - currentW * 0.38, y - h * 0.85, x - currentW * 0.32, y - h, x - currentW * 0.32, y - h);
-    ctx.lineTo(x + currentW * 0.32, y - h);
-    ctx.bezierCurveTo(x + currentW * 0.32, y - h, x + currentW * 0.38, y - h * 0.85, x + currentW * 0.42, y - h * 0.6);
-    ctx.closePath();
-    ctx.fill();
-
-    // Roof Highlight
-    const roofGrad = ctx.createLinearGradient(x, y - h, x, y - h + 10);
-    roofGrad.addColorStop(0, 'rgba(255,255,255,0.2)');
-    roofGrad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = roofGrad;
-    ctx.fill();
-
-    // Decals
-    if (config.decal === 'stripes') {
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.fillRect(x - currentW / 10, y - h, currentW / 20, h);
-      ctx.fillRect(x + currentW / 20, y - h, currentW / 20, h);
-    } else if (config.decal === 'racing-number') {
-      ctx.fillStyle = 'white';
-      ctx.beginPath();
-      ctx.arc(x, y - h * 0.45, currentW / 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'black';
-      ctx.font = `bold ${h / 5}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('86', x, y - h * 0.45);
-    } else if (config.decal === 'flames') {
-      ctx.fillStyle = '#f97316';
-      ctx.beginPath();
-      ctx.moveTo(x - currentW * 0.4, y - h * 0.3);
-      ctx.quadraticCurveTo(x - currentW * 0.2, y - h * 0.5, x, y - h * 0.3);
-      ctx.quadraticCurveTo(x + currentW * 0.2, y - h * 0.5, x + currentW * 0.4, y - h * 0.3);
-      ctx.fill();
-    } else if (config.decal === 'tribal') {
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(x - currentW * 0.3, y - h * 0.4);
-      ctx.lineTo(x - currentW * 0.1, y - h * 0.2);
-      ctx.lineTo(x + currentW * 0.1, y - h * 0.4);
-      ctx.lineTo(x + currentW * 0.3, y - h * 0.2);
-      ctx.stroke();
-    }
-
-    // Rear Window (Blue Reflection)
-    const winGrad = ctx.createLinearGradient(x, y - h + 15, x, y - h + 15 + h / 2.5);
-    winGrad.addColorStop(0, '#3b82f6');
-    winGrad.addColorStop(0.5, '#60a5fa');
-    winGrad.addColorStop(1, '#1d4ed8');
-    ctx.fillStyle = winGrad;
-    ctx.beginPath();
-    ctx.moveTo(x - w * 0.28, y - h + 12);
-    ctx.lineTo(x + w * 0.28, y - h + 12);
-    ctx.lineTo(x + w * 0.38, y - h * 0.6 - 8);
-    ctx.lineTo(x - w * 0.38, y - h * 0.6 - 8);
-    ctx.closePath();
-    ctx.fill();
-
-    // Damage Cracks on window
-    if (damage > 20) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x - w * 0.1, y - h + 20);
-      ctx.lineTo(x + w * 0.1, y - h + 40);
-      ctx.moveTo(x + w * 0.05, y - h + 25);
-      ctx.lineTo(x - w * 0.05, y - h + 45);
-      ctx.stroke();
-    }
-    
-    if (damage > 60) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.beginPath();
-      ctx.moveTo(x - w * 0.2, y - h + 15);
-      ctx.lineTo(x - w * 0.1, y - h + 35);
-      ctx.stroke();
-    }
-
-    // Tail Lights (Vibrant Red with Bloom)
-    ctx.fillStyle = isBraking ? '#ff0000' : '#880000';
-    ctx.shadowBlur = isBraking ? 45 : 25;
-    ctx.shadowColor = '#ff0000';
-    ctx.beginPath();
-    ctx.roundRect(x - w * 0.44, y - h * 0.52, w / 4, h / 10, 3);
-    ctx.roundRect(x + w * 0.44 - w / 4, y - h * 0.52, w / 4, h / 10, 3);
-    ctx.fill();
-    
-    // Inner light glow
-    ctx.fillStyle = isBraking ? '#ffffff' : '#ffcccc';
-    ctx.shadowBlur = isBraking ? 25 : 10;
-    ctx.beginPath();
-    ctx.roundRect(x - w * 0.38, y - h * 0.5 + 1, w / 15, h / 20, 1);
-    ctx.roundRect(x + w * 0.38 - w / 15, y - h * 0.5 + 1, w / 15, h / 20, 1);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // Third Brake Light
-    if (isBraking) {
-      ctx.fillStyle = '#ff0000';
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = '#ff0000';
-      ctx.fillRect(x - 15, y - h + 5, 30, 4);
-      ctx.shadowBlur = 0;
-    }
-
-    // Exhaust Pipes
-    ctx.fillStyle = '#71717a';
-    ctx.beginPath();
-    ctx.arc(x - w / 4, y - 8, 12, 0, Math.PI * 2);
-    ctx.arc(x + w / 4, y - 8, 12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#18181b';
-    ctx.beginPath();
-    ctx.arc(x - w / 4, y - 8, 8, 0, Math.PI * 2);
-    ctx.arc(x + w / 4, y - 8, 8, 0, Math.PI * 2);
-    ctx.fill();
-
-    // License Plate
-    ctx.fillStyle = '#facc15'; // Yellow plate
-    ctx.beginPath();
-    ctx.roundRect(x - 22, y - h * 0.28, 44, 16, 2);
-    ctx.fill();
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('DRIFT', x, y - h * 0.28 + 12);
-
-    ctx.restore();
-  };
-
-  const shadeColor = (color: string, percent: number) => {
-    let R = parseInt(color.substring(1, 3), 16);
-    let G = parseInt(color.substring(3, 5), 16);
-    let B = parseInt(color.substring(5, 7), 16);
-
-    R = Math.floor(R * (100 + percent) / 100);
-    G = Math.floor(G * (100 + percent) / 100);
-    B = Math.floor(B * (100 + percent) / 100);
-
-    R = (R < 255) ? R : 255;
-    G = (G < 255) ? G : 255;
-    B = (B < 255) ? B : 255;
-
-    const RR = ((R.toString(16).length === 1) ? "0" + R.toString(16) : R.toString(16));
-    const GG = ((G.toString(16).length === 1) ? "0" + G.toString(16) : G.toString(16));
-    const BB = ((B.toString(16).length === 1) ? "0" + B.toString(16) : B.toString(16));
-
-    return "#" + RR + GG + BB;
   };
 
   return (

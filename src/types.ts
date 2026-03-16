@@ -12,6 +12,12 @@ export interface CarConfig {
   turbo: number;
 }
 
+export interface Inventory {
+  engines: number[];
+  tires: number[];
+  turbos: number[];
+}
+
 export type RaceMode = 'classic' | 'time-trial' | 'elimination' | 'drift';
 
 export const BODY_KITS = {
@@ -28,6 +34,30 @@ export const DECALS = {
   flames: { name: 'Hot Flames' },
   tribal: { name: 'Tribal Art' },
 };
+
+export const PERFORMANCE_PARTS = {
+  engine: [
+    { level: 1, name: 'Stock V6', price: 0, boost: 0 },
+    { level: 2, name: 'Tuned V6', price: 2500, boost: 10 },
+    { level: 3, name: 'V8 Swap', price: 6000, boost: 25 },
+    { level: 4, name: 'Racing V8', price: 12000, boost: 45 },
+    { level: 5, name: 'Hypercar V12', price: 25000, boost: 70 },
+  ],
+  tires: [
+    { level: 1, name: 'Street Tires', price: 0, grip: 0 },
+    { level: 2, name: 'Sport Tires', price: 1500, grip: 15 },
+    { level: 3, name: 'Track Slicks', price: 4000, grip: 35 },
+    { level: 4, name: 'Racing Slicks', price: 8500, grip: 60 },
+    { level: 5, name: 'F1 Compounds', price: 18000, grip: 90 },
+  ],
+  turbo: [
+    { level: 1, name: 'Naturally Aspirated', price: 0, accel: 0 },
+    { level: 2, name: 'Street Turbo', price: 3000, accel: 15 },
+    { level: 3, name: 'Twin Turbo', price: 7500, accel: 35 },
+    { level: 4, name: 'Big Single Turbo', price: 15000, accel: 65 },
+    { level: 5, name: 'Quad Turbo', price: 30000, accel: 100 },
+  ]
+} as const;
 
 export const CAR_MODELS: Record<CarModelType, { name: string; description: string; stats: any }> = {
   speedster: { name: 'Speedster', description: 'High top speed, lower handling.', stats: { speed: 8, accel: 6, handling: 4 } },

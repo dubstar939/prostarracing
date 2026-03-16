@@ -10,13 +10,15 @@ import {
   Check,
   Lock
 } from 'lucide-react';
-import { CarConfig, CAR_MODELS, BODY_KITS, DECALS, CarModelType } from '../types';
+import { CarConfig, CAR_MODELS, BODY_KITS, DECALS, CarModelType, Inventory, PERFORMANCE_PARTS } from '../types';
+import { drawCar } from '../utils/carRenderer';
 
 interface GarageProps {
   carConfig: CarConfig;
   setCarConfig: (config: CarConfig) => void;
   money: number;
   setMoney: (money: number) => void;
+  inventory: Inventory;
   onBack: () => void;
 }
 
@@ -33,8 +35,8 @@ const COLORS = [
   '#06b6d4', // Cyan
 ];
 
-export default function Garage({ carConfig, setCarConfig, money, setMoney, onBack }: GarageProps) {
-  const [activeTab, setActiveTab] = useState<'model' | 'paint' | 'decals' | 'bodykit'>('model');
+export default function Garage({ carConfig, setCarConfig, money, setMoney, inventory, onBack }: GarageProps) {
+  const [activeTab, setActiveTab] = useState<'model' | 'paint' | 'decals' | 'bodykit' | 'performance'>('model');
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Preview rendering logic (similar to RacingGame but larger and rotatable)
@@ -60,125 +62,10 @@ export default function Garage({ carConfig, setCarConfig, money, setMoney, onBac
       ctx.fill();
 
       // Draw Car Preview (Rear-ish view)
-      drawCarPreview(ctx, x, y, w, h, carConfig);
+      drawCar(ctx, x, y, w, h, carConfig, false, 0, 0);
       
       frame++;
       requestAnimationFrame(render);
-    };
-
-    const drawCarPreview = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig) => {
-      ctx.save();
-      
-      // Subtle hover animation
-      const hoverY = Math.sin(frame * 0.05) * 5;
-      ctx.translate(0, hoverY);
-
-      // Spoiler
-      if (config.spoiler !== 'none') {
-        const wingHeight = config.spoiler === 'large' ? 45 : 25;
-        const wingWidth = w * 0.9;
-        
-        ctx.fillStyle = '#111';
-        ctx.fillRect(x - wingWidth / 2, y - h - wingHeight, wingWidth, 12);
-        
-        ctx.strokeStyle = '#111';
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.moveTo(x - w * 0.3, y - h + 10);
-        ctx.lineTo(x - w * 0.35, y - h - wingHeight);
-        ctx.moveTo(x + w * 0.3, y - h + 10);
-        ctx.lineTo(x + w * 0.35, y - h - wingHeight);
-        ctx.stroke();
-      }
-
-      // Body Kit - Street/Racing/Extreme additions
-      if (config.bodyKit !== 'stock') {
-        ctx.fillStyle = '#0a0a0a';
-        const kitWidth = config.bodyKit === 'extreme' ? w * 1.15 : w * 1.05;
-        ctx.beginPath();
-        ctx.roundRect(x - kitWidth / 2, y - 15, kitWidth, 25, 5);
-        ctx.fill();
-      }
-
-      // Main Body
-      const bodyGrad = ctx.createLinearGradient(x, y - h, x, y);
-      bodyGrad.addColorStop(0, config.color);
-      bodyGrad.addColorStop(1, shadeColor(config.color, -30));
-      ctx.fillStyle = bodyGrad;
-      
-      ctx.beginPath();
-      ctx.roundRect(x - w / 2, y - h * 0.6, w, h * 0.6, 15);
-      ctx.fill();
-
-      // Upper Cabin
-      ctx.fillStyle = shadeColor(config.color, -10);
-      ctx.beginPath();
-      ctx.moveTo(x - w * 0.4, y - h * 0.6);
-      ctx.lineTo(x - w * 0.3, y - h);
-      ctx.lineTo(x + w * 0.3, y - h);
-      ctx.lineTo(x + w * 0.4, y - h * 0.6);
-      ctx.closePath();
-      ctx.fill();
-
-      // Window
-      ctx.fillStyle = '#1e293b';
-      ctx.beginPath();
-      ctx.moveTo(x - w * 0.35, y - h * 0.65);
-      ctx.lineTo(x - w * 0.28, y - h + 10);
-      ctx.lineTo(x + w * 0.28, y - h + 10);
-      ctx.lineTo(x + w * 0.35, y - h * 0.65);
-      ctx.closePath();
-      ctx.fill();
-
-      // Decals
-      if (config.decal === 'stripes') {
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.fillRect(x - w * 0.1, y - h, w * 0.05, h);
-        ctx.fillRect(x + w * 0.05, y - h, w * 0.05, h);
-      } else if (config.decal === 'racing-number') {
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(x, y - h * 0.4, 25, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'black';
-        ctx.font = 'bold 20px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('01', x, y - h * 0.4);
-      } else if (config.decal === 'flames') {
-        ctx.fillStyle = '#f97316';
-        ctx.beginPath();
-        ctx.moveTo(x - w * 0.4, y - h * 0.3);
-        ctx.quadraticCurveTo(x - w * 0.2, y - h * 0.5, x, y - h * 0.3);
-        ctx.quadraticCurveTo(x + w * 0.2, y - h * 0.5, x + w * 0.4, y - h * 0.3);
-        ctx.fill();
-      }
-
-      // Tail Lights
-      ctx.fillStyle = '#ef4444';
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = '#ef4444';
-      ctx.fillRect(x - w * 0.45, y - h * 0.5, 40, 15);
-      ctx.fillRect(x + w * 0.45 - 40, y - h * 0.5, 40, 15);
-      ctx.shadowBlur = 0;
-
-      ctx.restore();
-    };
-
-    const shadeColor = (color: string, percent: number) => {
-      let R = parseInt(color.substring(1, 3), 16);
-      let G = parseInt(color.substring(3, 5), 16);
-      let B = parseInt(color.substring(5, 7), 16);
-      R = Math.floor(R * (100 + percent) / 100);
-      G = Math.floor(G * (100 + percent) / 100);
-      B = Math.floor(B * (100 + percent) / 100);
-      R = (R < 255) ? R : 255;
-      G = (G < 255) ? G : 255;
-      B = (B < 255) ? B : 255;
-      const RR = ((R.toString(16).length === 1) ? "0" + R.toString(16) : R.toString(16));
-      const GG = ((G.toString(16).length === 1) ? "0" + G.toString(16) : G.toString(16));
-      const BB = ((B.toString(16).length === 1) ? "0" + B.toString(16) : B.toString(16));
-      return "#" + RR + GG + BB;
     };
 
     render();
@@ -246,7 +133,7 @@ export default function Garage({ carConfig, setCarConfig, money, setMoney, onBac
         <div className="w-full lg:w-[450px] bg-zinc-900/50 backdrop-blur-xl border-l border-zinc-800 p-8 flex flex-col gap-8 overflow-y-auto">
           {/* Tabs */}
           <div className="flex gap-2 p-1 bg-black rounded-sm border border-zinc-800">
-            {(['model', 'paint', 'decals', 'bodykit'] as const).map((tab) => (
+            {(['model', 'paint', 'decals', 'bodykit', 'performance'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -359,7 +246,7 @@ export default function Garage({ carConfig, setCarConfig, money, setMoney, onBac
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                className="space-y-4"
+                className="space-y-6"
               >
                 <div className="flex items-center gap-3">
                   <Zap className="w-5 h-5 text-cyan-400" />
@@ -386,6 +273,91 @@ export default function Garage({ carConfig, setCarConfig, money, setMoney, onBac
                     </button>
                   ))}
                 </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'performance' && (
+              <motion.div 
+                key="performance"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-6"
+              >
+                <div className="flex items-center gap-3">
+                  <Zap className="w-5 h-5 text-emerald-400" />
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-400">Performance Parts</h3>
+                </div>
+                
+                {/* Engine */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Engine</h4>
+                  <div className="grid grid-cols-1 gap-2">
+                    {PERFORMANCE_PARTS.engine.filter(p => inventory.engines.includes(p.level)).map((part) => (
+                      <button
+                        key={part.level}
+                        onClick={() => updateConfig({ engine: part.level })}
+                        className={`p-3 rounded-sm border text-left transition-all ${
+                          carConfig.engine === part.level 
+                            ? 'bg-emerald-900/40 text-emerald-400 border-emerald-500' 
+                            : 'bg-zinc-900 text-white border-zinc-800 hover:border-zinc-700'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold uppercase tracking-widest text-xs">{part.name}</span>
+                          {carConfig.engine === part.level && <Check className="w-4 h-4" />}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tires */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Tires</h4>
+                  <div className="grid grid-cols-1 gap-2">
+                    {PERFORMANCE_PARTS.tires.filter(p => inventory.tires.includes(p.level)).map((part) => (
+                      <button
+                        key={part.level}
+                        onClick={() => updateConfig({ tires: part.level })}
+                        className={`p-3 rounded-sm border text-left transition-all ${
+                          carConfig.tires === part.level 
+                            ? 'bg-emerald-900/40 text-emerald-400 border-emerald-500' 
+                            : 'bg-zinc-900 text-white border-zinc-800 hover:border-zinc-700'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold uppercase tracking-widest text-xs">{part.name}</span>
+                          {carConfig.tires === part.level && <Check className="w-4 h-4" />}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Turbo */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Turbo</h4>
+                  <div className="grid grid-cols-1 gap-2">
+                    {PERFORMANCE_PARTS.turbo.filter(p => inventory.turbos.includes(p.level)).map((part) => (
+                      <button
+                        key={part.level}
+                        onClick={() => updateConfig({ turbo: part.level })}
+                        className={`p-3 rounded-sm border text-left transition-all ${
+                          carConfig.turbo === part.level 
+                            ? 'bg-emerald-900/40 text-emerald-400 border-emerald-500' 
+                            : 'bg-zinc-900 text-white border-zinc-800 hover:border-zinc-700'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold uppercase tracking-widest text-xs">{part.name}</span>
+                          {carConfig.turbo === part.level && <Check className="w-4 h-4" />}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
               </motion.div>
             )}
           </AnimatePresence>

@@ -55,9 +55,11 @@ function useCoverImage() {
 }
 
 import Garage from './components/Garage';
+import Store from './components/Store';
+import { CarConfig, CAR_MODELS, CarModelType, RaceMode, Inventory } from './types';
 
 export default function App() {
-  const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'options' | 'mode-select' | 'garage'>('title');
+  const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'options' | 'mode-select' | 'garage' | 'store'>('title');
   const [level, setLevel] = useState(() => {
     const saved = localStorage.getItem('racing_level');
     return saved ? parseInt(saved, 10) : 1;
@@ -80,6 +82,15 @@ export default function App() {
       turbo: 1
     };
   });
+  
+  const [inventory, setInventory] = useState<Inventory>(() => {
+    const saved = localStorage.getItem('racing_inventory');
+    return saved ? JSON.parse(saved) : {
+      engines: [1],
+      tires: [1],
+      turbos: [1]
+    };
+  });
   const [lastResult, setLastResult] = useState<{ position: number; time: string; reward: number; score?: number } | null>(null);
   const [raceMode, setRaceMode] = useState<RaceMode>('classic');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -95,6 +106,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('racing_car_config', JSON.stringify(carConfig));
   }, [carConfig]);
+
+  useEffect(() => {
+    localStorage.setItem('racing_inventory', JSON.stringify(inventory));
+  }, [inventory]);
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [roomId, setRoomId] = useState('');
   const [trackTheme, setTrackTheme] = useState<TrackThemeType>('city');
@@ -144,8 +159,10 @@ export default function App() {
     localStorage.removeItem('racing_level');
     localStorage.removeItem('racing_car_config');
     localStorage.removeItem('racing_money');
+    localStorage.removeItem('racing_inventory');
     setLevel(1);
     setMoney(0);
+    setInventory({ engines: [1], tires: [1], turbos: [1] });
     window.location.reload();
   };
 
@@ -239,8 +256,17 @@ export default function App() {
                 onClick={() => setGameState('garage')}
                 className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
               >
-                <ShoppingBag className="w-6 h-6 text-emerald-400" />
+                <Settings className="w-6 h-6 text-emerald-400" />
                 <span className="uppercase tracking-tight text-xl">The Garage</span>
+                <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+              </button>
+
+              <button
+                onClick={() => setGameState('store')}
+                className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+              >
+                <ShoppingBag className="w-6 h-6 text-cyan-400" />
+                <span className="uppercase tracking-tight text-xl">Parts Store</span>
                 <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
               </button>
 
@@ -471,6 +497,17 @@ export default function App() {
             setCarConfig={setCarConfig}
             money={money}
             setMoney={setMoney}
+            inventory={inventory}
+            onBack={() => setGameState('menu')}
+          />
+        )}
+
+        {gameState === 'store' && (
+          <Store 
+            money={money}
+            setMoney={setMoney}
+            inventory={inventory}
+            setInventory={setInventory}
             onBack={() => setGameState('menu')}
           />
         )}
