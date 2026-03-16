@@ -57,12 +57,22 @@ export const drawCar = (
 
   // --- TIRES & RIMS ---
   ctx.fillStyle = '#111';
-  const tireWidth = currentW * 0.2 + (config.tires * 2); // Better tires = wider
-  ctx.fillRect(x - currentW / 2 - tireWidth/2 + 5, y - h * 0.2, tireWidth, h * 0.3);
-  ctx.fillRect(x + currentW / 2 - tireWidth/2 - 5, y - h * 0.2, tireWidth, h * 0.3);
+  let tireWidth = currentW * 0.2 + (config.tires * 2);
+  let tireHeight = h * 0.3;
+  let tireY = y - h * 0.2;
+
+  if (config.model === 'tank') {
+    tireWidth *= 1.4;
+    tireHeight *= 1.2;
+  } else if (config.model === 'drifter') {
+    tireWidth *= 1.2;
+  }
+
+  ctx.fillRect(x - currentW / 2 - tireWidth/2 + 5, tireY, tireWidth, tireHeight);
+  ctx.fillRect(x + currentW / 2 - tireWidth/2 - 5, tireY, tireWidth, tireHeight);
 
   // --- SPOILER ---
-  if (config.spoiler !== 'none') {
+  if (config.spoiler !== 'none' || config.model === 'interceptor') {
     let wingHeight = 20;
     let wingWidth = currentW * 0.8;
     let mountOffset = 0.2;
@@ -70,7 +80,7 @@ export const drawCar = (
     if (config.spoiler === 'small') {
       wingHeight = 25;
       wingWidth = currentW * 0.85;
-    } else if (config.spoiler === 'large') {
+    } else if (config.spoiler === 'large' || config.model === 'interceptor') {
       wingHeight = 45;
       wingWidth = currentW * 1.1;
       mountOffset = 0.3;
@@ -95,73 +105,68 @@ export const drawCar = (
     ctx.closePath();
     ctx.fill();
 
-    // Wing Endplates (Large spoiler)
-    if (config.spoiler === 'large') {
+    // Wing Endplates
+    if (config.spoiler === 'large' || config.model === 'interceptor') {
       ctx.fillStyle = config.color;
       ctx.fillRect(x - wingWidth / 2 - 2, y - h - wingHeight - 5, 4, 25);
       ctx.fillRect(x + wingWidth / 2 - 2, y - h - wingHeight - 5, 4, 25);
     }
   }
 
-  // --- LOWER BODY (Widebody & Bumpers) ---
+  // --- MAIN BODY ---
   const bodyGrad = ctx.createLinearGradient(x, y - h, x, y);
   bodyGrad.addColorStop(0, config.color);
   bodyGrad.addColorStop(1, shadeColor(config.color, -40));
   ctx.fillStyle = bodyGrad;
   
   ctx.beginPath();
-  ctx.moveTo(x - currentW / 2, y - h * 0.1);
-  ctx.bezierCurveTo(x - currentW / 2, y - h * 0.4, x - currentW * 0.48, y - h * 0.6, x - currentW * 0.48, y - h * 0.6);
-  ctx.lineTo(x + currentW * 0.48, y - h * 0.6);
-  ctx.bezierCurveTo(x + currentW * 0.48, y - h * 0.6, x + currentW / 2, y - h * 0.4, x + currentW / 2, y - h * 0.1);
+  if (config.model === 'speedster') {
+    // Sleek, low profile
+    ctx.moveTo(x - currentW / 2, y - h * 0.1);
+    ctx.bezierCurveTo(x - currentW / 2, y - h * 0.3, x - currentW * 0.45, y - h * 0.5, x - currentW * 0.45, y - h * 0.5);
+    ctx.lineTo(x + currentW * 0.45, y - h * 0.5);
+    ctx.bezierCurveTo(x + currentW * 0.45, y - h * 0.5, x + currentW / 2, y - h * 0.3, x + currentW / 2, y - h * 0.1);
+  } else if (config.model === 'tank') {
+    // Boxy, heavy
+    ctx.moveTo(x - currentW * 0.55, y - h * 0.1);
+    ctx.lineTo(x - currentW * 0.55, y - h * 0.6);
+    ctx.lineTo(x + currentW * 0.55, y - h * 0.6);
+    ctx.lineTo(x + currentW * 0.55, y - h * 0.1);
+  } else if (config.model === 'drifter') {
+    // Wide, aggressive
+    ctx.moveTo(x - currentW * 0.52, y - h * 0.1);
+    ctx.lineTo(x - currentW * 0.48, y - h * 0.55);
+    ctx.lineTo(x + currentW * 0.48, y - h * 0.55);
+    ctx.lineTo(x + currentW * 0.52, y - h * 0.1);
+  } else {
+    // Interceptor / Default: Sporty
+    ctx.moveTo(x - currentW / 2, y - h * 0.1);
+    ctx.bezierCurveTo(x - currentW / 2, y - h * 0.4, x - currentW * 0.48, y - h * 0.6, x - currentW * 0.48, y - h * 0.6);
+    ctx.lineTo(x + currentW * 0.48, y - h * 0.6);
+    ctx.bezierCurveTo(x + currentW * 0.48, y - h * 0.6, x + currentW / 2, y - h * 0.4, x + currentW / 2, y - h * 0.1);
+  }
   ctx.closePath();
   ctx.fill();
 
-  // --- BODY KITS DETAILS ---
-  if (config.bodyKit === 'street' || config.bodyKit === 'racing' || config.bodyKit === 'extreme') {
-    // Side Skirts
-    ctx.fillStyle = '#111';
-    ctx.fillRect(x - currentW / 2 - 5, y - h * 0.15, 10, h * 0.1);
-    ctx.fillRect(x + currentW / 2 - 5, y - h * 0.15, 10, h * 0.1);
-  }
-  
-  if (config.bodyKit === 'racing' || config.bodyKit === 'extreme') {
-    // Vents
-    ctx.fillStyle = '#000';
-    ctx.fillRect(x - currentW * 0.45, y - h * 0.4, 10, 25);
-    ctx.fillRect(x + currentW * 0.45 - 10, y - h * 0.4, 10, 25);
-  }
-
-  if (config.bodyKit === 'extreme') {
-    // Massive Rear Diffuser
-    ctx.fillStyle = '#050505';
-    ctx.beginPath();
-    ctx.moveTo(x - currentW * 0.4, y - h * 0.1);
-    ctx.lineTo(x + currentW * 0.4, y - h * 0.1);
-    ctx.lineTo(x + currentW * 0.45, y + 5);
-    ctx.lineTo(x - currentW * 0.45, y + 5);
-    ctx.fill();
-    
-    // Diffuser Fins
-    ctx.fillStyle = '#222';
-    for(let i = -3; i <= 3; i++) {
-      ctx.fillRect(x + i * (currentW * 0.1) - 2, y - h * 0.1, 4, h * 0.2);
-    }
-  } else {
-    // Standard Rear Bumper
-    ctx.fillStyle = '#0a0a0a';
-    ctx.beginPath();
-    ctx.roundRect(x - currentW / 2, y - h * 0.18, currentW, h * 0.18, 5);
-    ctx.fill();
-  }
-
-  // --- UPPER CABIN ---
+  // --- CABIN ---
   ctx.fillStyle = shadeColor(config.color, -15);
   ctx.beginPath();
-  ctx.moveTo(x - currentW * 0.42, y - h * 0.6);
-  ctx.bezierCurveTo(x - currentW * 0.38, y - h * 0.85, x - currentW * 0.32, y - h, x - currentW * 0.32, y - h);
-  ctx.lineTo(x + currentW * 0.32, y - h);
-  ctx.bezierCurveTo(x + currentW * 0.32, y - h, x + currentW * 0.38, y - h * 0.85, x + currentW * 0.42, y - h * 0.6);
+  if (config.model === 'tank') {
+    ctx.moveTo(x - currentW * 0.45, y - h * 0.6);
+    ctx.lineTo(x - currentW * 0.4, y - h * 1.1);
+    ctx.lineTo(x + currentW * 0.4, y - h * 1.1);
+    ctx.lineTo(x + currentW * 0.45, y - h * 0.6);
+  } else if (config.model === 'speedster') {
+    ctx.moveTo(x - currentW * 0.4, y - h * 0.5);
+    ctx.bezierCurveTo(x - currentW * 0.35, y - h * 0.75, x - currentW * 0.25, y - h * 0.9, x - currentW * 0.25, y - h * 0.9);
+    ctx.lineTo(x + currentW * 0.25, y - h * 0.9);
+    ctx.bezierCurveTo(x + currentW * 0.25, y - h * 0.9, x + currentW * 0.35, y - h * 0.75, x + currentW * 0.4, y - h * 0.5);
+  } else {
+    ctx.moveTo(x - currentW * 0.42, y - h * 0.6);
+    ctx.bezierCurveTo(x - currentW * 0.38, y - h * 0.85, x - currentW * 0.32, y - h, x - currentW * 0.32, y - h);
+    ctx.lineTo(x + currentW * 0.32, y - h);
+    ctx.bezierCurveTo(x + currentW * 0.32, y - h, x + currentW * 0.38, y - h * 0.85, x + currentW * 0.42, y - h * 0.6);
+  }
   ctx.closePath();
   ctx.fill();
 

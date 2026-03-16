@@ -9,7 +9,7 @@ import { Trophy, Flag, Settings, Play, Info, Users, Globe, Loader2, Map, Shoppin
 import { motion, AnimatePresence } from 'motion/react';
 import { socketService } from './services/socketService';
 import { GoogleGenAI } from '@google/genai';
-import { CarConfig, CAR_MODELS, CarModelType, RaceMode } from './types';
+import { CarConfig, CAR_MODELS, CarModelType, RaceMode, Inventory } from './types';
 
 function useCoverImage() {
   const [coverImage, setCoverImage] = useState<string | null>(localStorage.getItem('coverImage'));
@@ -56,7 +56,6 @@ function useCoverImage() {
 
 import Garage from './components/Garage';
 import Store from './components/Store';
-import { CarConfig, CAR_MODELS, CarModelType, RaceMode, Inventory } from './types';
 
 export default function App() {
   const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'options' | 'mode-select' | 'garage' | 'store'>('title');
@@ -197,14 +196,14 @@ export default function App() {
             )}
             
             {/* Overlay Content */}
-            <div className="relative z-10 text-center space-y-12">
+            <div className="relative z-10 text-center space-y-8 md:space-y-12 p-4">
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.5, duration: 0.8, ease: "easeOut" }}
                 className="space-y-2 px-4"
               >
-                <h1 className="text-5xl md:text-8xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-cyan-400 via-blue-500 to-purple-600 uppercase drop-shadow-[0_0_30px_rgba(6,182,212,0.5)]">
+                <h1 className="text-4xl sm:text-6xl md:text-8xl lg:text-9xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-cyan-400 via-blue-500 to-purple-600 uppercase drop-shadow-[0_0_30px_rgba(6,182,212,0.5)] leading-tight">
                   Pro Star-Racing
                 </h1>
                 <div className="h-1 w-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent"></div>
@@ -213,7 +212,7 @@ export default function App() {
               <motion.div
                 animate={{ opacity: [0.3, 1, 0.3] }}
                 transition={{ repeat: Infinity, duration: 2 }}
-                className="text-2xl font-mono font-bold tracking-[0.5em] text-cyan-400 uppercase"
+                className="text-lg sm:text-2xl font-mono font-bold tracking-[0.3em] sm:tracking-[0.5em] text-cyan-400 uppercase"
               >
                 Press Start
               </motion.div>
@@ -233,58 +232,60 @@ export default function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="text-center space-y-12 max-w-md w-full px-6"
+            className="text-center space-y-8 md:space-y-12 max-w-md w-full px-6"
           >
             <div className="space-y-2">
-              <h1 className="text-4xl md:text-7xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-500 uppercase">
+              <h1 className="text-4xl sm:text-5xl md:text-7xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-500 uppercase">
                 Main Menu
               </h1>
-              <p className="text-zinc-500 font-mono text-xs tracking-[0.3em] uppercase">Select your destination</p>
+              <p className="text-zinc-500 font-mono text-[10px] sm:text-xs tracking-[0.2em] sm:tracking-[0.3em] uppercase">Select your destination</p>
             </div>
 
-            <div className="flex flex-col gap-4 w-full">
+            <div className="flex flex-col gap-3 sm:gap-4 w-full">
               <button
                 onClick={() => setGameState('mode-select')}
-                className="group relative flex items-center justify-center gap-3 bg-white text-black font-bold py-6 px-8 rounded-sm hover:bg-zinc-200 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+                className="group relative flex items-center justify-center gap-3 bg-white text-black font-bold py-4 sm:py-6 px-6 sm:px-8 rounded-sm hover:bg-zinc-200 transition-all transform hover:skew-x-[-10deg] active:scale-95"
               >
-                <Play className="w-6 h-6 fill-current" />
-                <span className="uppercase tracking-tight text-xl">Start Game</span>
+                <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-current" />
+                <span className="uppercase tracking-tight text-lg sm:text-xl">Start Game</span>
                 <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/20 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
               </button>
 
-              <button
-                onClick={() => setGameState('garage')}
-                className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
-              >
-                <Settings className="w-6 h-6 text-emerald-400" />
-                <span className="uppercase tracking-tight text-xl">The Garage</span>
-                <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <button
+                  onClick={() => setGameState('garage')}
+                  className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-4 sm:py-6 px-6 sm:px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+                >
+                  <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
+                  <span className="uppercase tracking-tight text-base sm:text-xl">Garage</span>
+                  <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+                </button>
 
-              <button
-                onClick={() => setGameState('store')}
-                className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
-              >
-                <ShoppingBag className="w-6 h-6 text-cyan-400" />
-                <span className="uppercase tracking-tight text-xl">Parts Store</span>
-                <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
-              </button>
+                <button
+                  onClick={() => setGameState('store')}
+                  className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-4 sm:py-6 px-6 sm:px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+                >
+                  <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" />
+                  <span className="uppercase tracking-tight text-base sm:text-xl">Store</span>
+                  <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+                </button>
+              </div>
 
               <button
                 onClick={() => setGameState('options')}
-                className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+                className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-4 sm:py-6 px-6 sm:px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
               >
-                <Settings className="w-6 h-6 text-cyan-400" />
-                <span className="uppercase tracking-tight text-xl">Options</span>
+                <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" />
+                <span className="uppercase tracking-tight text-lg sm:text-xl">Options</span>
                 <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
               </button>
 
               <button
                 onClick={() => setGameState('title')}
-                className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-6 px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
+                className="group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-4 sm:py-6 px-6 sm:px-8 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
               >
-                <Flag className="w-6 h-6 text-red-500" />
-                <span className="uppercase tracking-tight text-xl">Quit</span>
+                <Flag className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />
+                <span className="uppercase tracking-tight text-lg sm:text-xl">Quit</span>
                 <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
               </button>
             </div>

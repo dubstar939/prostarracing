@@ -6,7 +6,7 @@ import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, Chev
 import { socketService } from '../services/socketService';
 import { drawCar, shadeColor } from '../utils/carRenderer';
 
-import { CarConfig, RaceMode, PERFORMANCE_PARTS } from '../types';
+import { CarConfig, RaceMode, PERFORMANCE_PARTS, CarModelType } from '../types';
 
 export type TrackThemeType = 'city' | 'desert' | 'mountain';
 
@@ -264,6 +264,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     const resetTrack = () => {
       segments = [];
       cityscapeRef.current = [];
+      audioManager.setTheme(trackTheme);
       
       // Simple seeded random for consistent tracks per level
       let seed = level * 12345;
@@ -272,9 +273,32 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         return seed / 233280;
       };
 
+      // Theme-based colors
+      const themeColors = {
+        city: { road: '#333', grass: '#1e293b', rumble: '#fff', lane: '#fff', altRoad: '#3a3a3a', altGrass: '#0f172a', altRumble: '#000' },
+        desert: { road: '#444', grass: '#f59e0b', rumble: '#fff', lane: '#fff', altRoad: '#4a4a4a', altGrass: '#d97706', altRumble: '#000' },
+        mountain: { road: '#222', grass: '#166534', rumble: '#fff', lane: '#fff', altRoad: '#2a2a2a', altGrass: '#14532d', altRumble: '#000' }
+      }[trackTheme];
+
+      const addSegment = (curve: number, y: number) => {
+        const n = segments.length;
+        const isAlt = Math.floor(n / RUMBLE_LENGTH) % 2;
+        segments.push({
+          index: n,
+          p1: { world: { x: 0, y: lastY(), z: n * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
+          p2: { world: { x: 0, y: y, z: (n + 1) * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
+          curve: curve,
+          sprites: [],
+          color: isAlt ? 
+            { road: themeColors.road, grass: themeColors.grass, rumble: themeColors.rumble, lane: themeColors.lane } : 
+            { road: themeColors.altRoad, grass: themeColors.altGrass, rumble: themeColors.altRumble }
+        });
+      };
+
       const addStraight = (length: number) => addRoad(length, length, length, 0, 0);
       const addCurve = (enter: number, hold: number, leave: number, curve: number, hill: number) => addRoad(enter, hold, leave, curve, hill);
       const addHill = (enter: number, hold: number, leave: number, hill: number) => addRoad(enter, hold, leave, 0, hill);
+      
       const addBumps = () => {
         const numBumps = 4 + Math.floor(random() * 6);
         for (let i = 0; i < numBumps; i++) {
@@ -282,6 +306,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
           addRoad(10, 10, 10, 0, -5);
         }
       };
+
       const addSCurves = () => {
         const dir = random() > 0.5 ? 1 : -1;
         const severity = 1 + level * 0.3;
@@ -294,30 +319,24 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       // Starting straight
       addStraight(100);
 
-      // Procedural sections
-      const numSections = 12 + Math.min(30, level * 3);
-      for (let i = 0; i < numSections; i++) {
-        const sectionType = random();
-        
-        if (sectionType < 0.15) {
-          // Long Straight
-          addStraight(40 + Math.floor(random() * 80));
-        } else if (sectionType < 0.3) {
-          // Hill/Dip
-          const hill = (random() - 0.5) * (40 + level * 15);
-          addHill(40, 60, 40, hill);
-        } else if (sectionType < 0.4) {
-          // Bumps
-          addBumps();
-        } else if (sectionType < 0.55) {
-          // S-Curves
+      // Theme-specific layout patterns
+      if (trackTheme === 'city') {
+        // City tracks: Tight turns, many straights
+        for (let i = 0; i < 15; i++) {
+          addStraight(50 + random() * 100);
+          addCurve(20, 40, 20, (random() > 0.5 ? 1 : -1) * (4 + random() * 4), 0);
+        }
+      } else if (trackTheme === 'desert') {
+        // Desert tracks: Long hills, wide curves
+        for (let i = 0; i < 10; i++) {
+          addHill(100, 100, 100, (random() - 0.5) * 80);
+          addCurve(100, 100, 100, (random() - 0.5) * 4, 0);
+        }
+      } else {
+        // Mountain tracks: Steep hills, sharp S-curves
+        for (let i = 0; i < 12; i++) {
+          addHill(50, 50, 50, (random() - 0.5) * 150);
           addSCurves();
-        } else {
-          // Standard Curve
-          const curve = (random() - 0.5) * (3 + level * 0.8);
-          const hill = (random() - 0.5) * (30 + level * 10);
-          const length = 20 + Math.floor(random() * 60);
-          addCurve(length, length, length, curve, hill);
         }
       }
 
@@ -330,13 +349,18 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         segments[n].checkpoint = true;
       }
 
-      // Add scenery (trees/props)
+      // Add scenery based on theme
       for (let n = 0; n < segments.length; n += 6) {
-        if (random() > 0.4) {
+        if (random() > 0.3) {
           const side = random() > 0.5 ? 1 : -1;
           const offset = (1.5 + random() * 3) * side;
+          let source = 'tree';
+          if (trackTheme === 'city') source = random() > 0.7 ? 'building' : 'lamp';
+          else if (trackTheme === 'desert') source = random() > 0.7 ? 'rock' : 'cactus';
+          else source = random() > 0.7 ? 'rock' : 'pine';
+
           segments[n].sprites.push({ 
-            source: 'tree', 
+            source, 
             offset: offset, 
             scale: 1.5 + random() * 2 
           });
@@ -389,10 +413,13 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
 
     // Smoke State
     let smokeParticles: { x: number; y: number; vx: number; vy: number; life: number; size: number; color: string }[] = [];
+    let turboParticles: { x: number; y: number; vx: number; vy: number; life: number; size: number; color: string }[] = [];
+    let sparkParticles: { x: number; y: number; vx: number; vy: number; life: number; size: number; color: string }[] = [];
     
     // Slipstream State
     let slipstreamParticles: { x: number; z: number; life: number; opacity: number }[] = [];
     let isSlipstreaming = false;
+    let screenShake = 0;
 
     const update = (dt: number) => {
       if (finished) {
@@ -404,6 +431,34 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         audioManager.update(0, false, false);
         return;
       }
+
+      // Update screen shake
+      if (screenShake > 0) screenShake -= dt * 10;
+
+      // Update Particles
+      smokeParticles = smokeParticles.filter(p => {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt * 2;
+        p.size += dt * 20;
+        return p.life > 0;
+      });
+
+      turboParticles = turboParticles.filter(p => {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt * 5;
+        p.size -= dt * 10;
+        return p.life > 0;
+      });
+
+      sparkParticles = sparkParticles.filter(p => {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt * 3;
+        p.vy += dt * 500; // Gravity
+        return p.life > 0;
+      });
 
       // Checkpoint Timer Update
       checkpointTime -= dt;
@@ -458,7 +513,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
 
       // Trigger Smoke & Drift Mechanic
       const isBraking = keysRef.current['ArrowDown'] || keysRef.current['KeyS'];
-      const isSteering = keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] || keysRef.current['ArrowRight'] || keysRef.current['KeyD'];
+      const isSteering = keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] || keysRef.current['ArrowRight'] || keysRef.current['KeyD'] || (useTilt && Math.abs(tiltRef.current) > 0.1);
       const isDrifting = isBraking && isSteering && speed > maxSpeed * 0.2;
 
       // Visual Drift Angle
@@ -475,7 +530,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
 
       if ((isBraking && speed > 1000) || isDrifting) {
         const smokeCount = isDrifting ? 4 : 2;
-        const smokeColor = damage > 70 ? 'rgba(80, 80, 80, 0.4)' : damage > 40 ? 'rgba(150, 150, 150, 0.4)' : 'rgba(255, 255, 255, 0.4)';
+        const smokeColor = weather === 'rain' ? 'rgba(200, 200, 255, 0.3)' : (damage > 70 ? 'rgba(80, 80, 80, 0.4)' : 'rgba(255, 255, 255, 0.4)');
         for (let i = 0; i < smokeCount; i++) {
           smokeParticles.push({
             x: SCREEN_WIDTH / 2 + (Math.random() - 0.5) * 140 + (isDrifting ? driftAngle * 100 : 0),
@@ -485,6 +540,21 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
             life: 0.4 + Math.random() * 0.6,
             size: 15 + Math.random() * 15,
             color: smokeColor
+          });
+        }
+      }
+
+      // Spawn Turbo Particles
+      if (turboActive) {
+        for (let i = 0; i < 5; i++) {
+          turboParticles.push({
+            x: SCREEN_WIDTH / 2 + (Math.random() - 0.5) * 40,
+            y: SCREEN_HEIGHT - 40,
+            vx: (Math.random() - 0.5) * 50,
+            vy: 100 + Math.random() * 200,
+            life: 0.3,
+            size: 10 + Math.random() * 10,
+            color: Math.random() > 0.5 ? '#3b82f6' : '#60a5fa'
           });
         }
       }
@@ -594,11 +664,31 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         const oppSegment = findSegment(opp.z);
         const oppSpeedPercent = opp.speed / maxSpeed;
 
-        // 1. Follow the curve (centrifugal force simulation for AI)
-        opp.offset -= (dt * oppSpeedPercent * oppSegment.curve * 0.8);
+        // 1. Look Ahead & Speed Control
+        // AI looks ahead to adjust speed for curves
+        let lookAheadZ = opp.z + 1500;
+        let lookAheadSegment = findSegment(lookAheadZ);
+        let curveAhead = Math.abs(lookAheadSegment.curve);
+        
+        // Target speed based on curve
+        const baseTargetSpeed = 8000 + (level * 200);
+        const curvePenalty = curveAhead * 4000;
+        const targetSpeed = Math.max(4000, baseTargetSpeed - curvePenalty);
+        
+        // Smoothly adjust speed (Acceleration/Braking)
+        if (opp.speed < targetSpeed) {
+          opp.speed += 2000 * dt;
+        } else {
+          opp.speed -= 4000 * dt;
+        }
 
-        // 2. Player Awareness & Overtaking
-        // Calculate distance to player in Z space, accounting for track looping
+        // 2. Path Following (PID-like steering)
+        // AI tries to stay near the center but takes a better line through curves
+        const idealOffset = -oppSegment.curve * 0.5; // Lean into the curve
+        const steeringError = idealOffset - opp.offset;
+        opp.offset += steeringError * 2.0 * dt;
+
+        // 3. Player Awareness & Overtaking
         let zDiff = opp.z - position;
         if (zDiff < -trackLength / 2) zDiff += trackLength;
         if (zDiff > trackLength / 2) zDiff -= trackLength;
@@ -608,44 +698,50 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
 
         // Collision Detection
         if (Math.abs(zDiff) < 400 && Math.abs(opp.offset - playerX) < 0.3) {
-          // Collision!
           const impact = Math.abs(speed - opp.speed) / 1000;
           damage = Math.min(100, damage + impact + 2);
           audioManager.playCollision(impact / 10);
+          screenShake = impact * 5;
+
+          for (let i = 0; i < 15; i++) {
+            sparkParticles.push({
+              x: SCREEN_WIDTH / 2 + (Math.random() - 0.5) * 100,
+              y: SCREEN_HEIGHT - 100,
+              vx: (Math.random() - 0.5) * 500,
+              vy: -Math.random() * 300,
+              life: 0.5 + Math.random() * 0.5,
+              size: 2 + Math.random() * 3,
+              color: '#fbbf24'
+            });
+          }
           
-          // Bounce
           if (speed > opp.speed) speed *= 0.8;
           else opp.speed *= 0.8;
-          
           playerX += (playerX > opp.offset ? 0.2 : -0.2);
         }
 
-        // If player is close (within 2500 units)
-        if (Math.abs(zDiff) < 2500) {
+        // If player is close
+        if (Math.abs(zDiff) < 3000) {
           if (zDiff > 0) { 
-            // AI is ahead of player: Blocking logic
-            // If player is close laterally, move slightly to block their path
-            if (Math.abs(opp.offset - playerX) < 0.6) {
-              const blockStrength = 0.8;
-              opp.offset += (playerX - opp.offset) * blockStrength * dt;
+            // AI is ahead: Defensive driving
+            if (Math.abs(opp.offset - playerX) < 0.8) {
+              opp.offset += (playerX - opp.offset) * 1.5 * dt;
             }
           } else { 
-            // AI is behind player: Overtake logic
-            // If in the same lane, move to the side to pass
-            if (Math.abs(opp.offset - playerX) < 0.4) {
-              const overtakeDir = opp.offset > 0 ? -1.5 : 1.5;
-              opp.offset += overtakeDir * dt;
+            // AI is behind: Aggressive overtaking
+            if (Math.abs(opp.offset - playerX) < 0.5) {
+              const overtakeDir = opp.offset > 0 ? -1.2 : 1.2;
+              opp.offset += overtakeDir * 2.0 * dt;
+              opp.speed += 1000 * dt; // Extra boost to pass
             }
           }
         }
 
-        // 3. Lane Keeping & Natural Wandering
-        // Keep them within road bounds
-        if (opp.offset > 0.9) opp.offset -= dt * 3;
-        else if (opp.offset < -0.9) opp.offset += dt * 3;
+        // Lane Keeping & Natural Wandering
+        if (opp.offset > 1.2) opp.offset = 1.2;
+        else if (opp.offset < -1.2) opp.offset = -1.2;
         
-        // Add a tiny bit of natural "human" wandering
-        opp.offset += Math.sin(Date.now() / 500 + opp.z) * 0.02 * dt;
+        opp.offset += Math.sin(Date.now() / 1000 + opp.z) * 0.05 * dt;
 
         // 4. Update Z position
         opp.z = (opp.z + dt * opp.speed);
@@ -695,101 +791,89 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       }));
     };
 
+    const drawCityscape = (ctx: CanvasRenderingContext2D, pos: number) => {
+      const offset = (pos * 0.1) % SCREEN_WIDTH;
+      ctx.fillStyle = '#0f172a';
+      for (let i = -1; i < 3; i++) {
+        const x = i * 400 - offset;
+        // Building silhouettes
+        ctx.fillRect(x + 50, SCREEN_HEIGHT / 2 - 150, 80, 150);
+        ctx.fillRect(x + 150, SCREEN_HEIGHT / 2 - 200, 100, 200);
+        ctx.fillRect(x + 280, SCREEN_HEIGHT / 2 - 120, 60, 120);
+        
+        // Windows
+        ctx.fillStyle = '#fef08a';
+        for (let j = 0; j < 5; j++) {
+          if (Math.random() > 0.3) ctx.fillRect(x + 60, SCREEN_HEIGHT / 2 - 140 + j * 25, 10, 10);
+          if (Math.random() > 0.3) ctx.fillRect(x + 160, SCREEN_HEIGHT / 2 - 190 + j * 30, 15, 15);
+        }
+        ctx.fillStyle = '#0f172a';
+      }
+    };
+
+    const drawDunes = (ctx: CanvasRenderingContext2D, pos: number) => {
+      const offset = (pos * 0.05) % SCREEN_WIDTH;
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.moveTo(0, SCREEN_HEIGHT / 2);
+      for (let i = -1; i < 3; i++) {
+        const x = i * SCREEN_WIDTH - offset;
+        ctx.quadraticCurveTo(x + SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2 - 100, x + SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 20);
+        ctx.quadraticCurveTo(x + 3 * SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2 - 80, x + SCREEN_WIDTH, SCREEN_HEIGHT / 2);
+      }
+      ctx.lineTo(SCREEN_WIDTH, SCREEN_HEIGHT / 2);
+      ctx.fill();
+    };
+
+    const drawMountains = (ctx: CanvasRenderingContext2D, pos: number) => {
+      const offset = (pos * 0.02) % SCREEN_WIDTH;
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.moveTo(0, SCREEN_HEIGHT / 2);
+      for (let i = -1; i < 3; i++) {
+        const x = i * SCREEN_WIDTH - offset;
+        ctx.lineTo(x + SCREEN_WIDTH * 0.2, SCREEN_HEIGHT / 2 - 150);
+        ctx.lineTo(x + SCREEN_WIDTH * 0.4, SCREEN_HEIGHT / 2 - 80);
+        ctx.lineTo(x + SCREEN_WIDTH * 0.6, SCREEN_HEIGHT / 2 - 200);
+        ctx.lineTo(x + SCREEN_WIDTH * 0.8, SCREEN_HEIGHT / 2 - 100);
+        ctx.lineTo(x + SCREEN_WIDTH, SCREEN_HEIGHT / 2);
+      }
+      ctx.fill();
+    };
+
     const draw = () => {
+      if (!ctx) return;
+
+      ctx.save();
+      if (screenShake > 0) {
+        ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+      }
+
       ctx.clearRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
       // Sky (Gradient)
-    const skyGrad = ctx.createLinearGradient(0, 0, 0, SCREEN_HEIGHT / 2);
-    if (weather === 'fog') {
-      skyGrad.addColorStop(0, '#1e293b');
-      skyGrad.addColorStop(1, '#475569');
-    } else if (weather === 'rain') {
-      skyGrad.addColorStop(0, '#020617');
-      skyGrad.addColorStop(1, '#1e293b');
-    } else {
-      skyGrad.addColorStop(0, '#0c4a6e'); // Deep midnight blue
-      skyGrad.addColorStop(0.5, '#0369a1'); // Ocean blue
-      skyGrad.addColorStop(1, '#38bdf8'); // Sky blue
-    }
-    ctx.fillStyle = skyGrad;
-    ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
-
-    // Sun / Horizon Glow (More atmospheric)
-    if (weather === 'clear') {
-      const sunGrad = ctx.createRadialGradient(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 300);
-      sunGrad.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
-      sunGrad.addColorStop(0.2, 'rgba(255, 255, 150, 0.1)');
-      sunGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-      ctx.fillStyle = sunGrad;
-      ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
-    }
-
-    // Mountains (More realistic silhouettes)
-    ctx.fillStyle = '#022c22';
-    ctx.beginPath();
-    ctx.moveTo(0, SCREEN_HEIGHT / 2);
-    ctx.lineTo(100, 150);
-    ctx.lineTo(200, 250);
-    ctx.lineTo(350, 100);
-    ctx.lineTo(500, 280);
-    ctx.lineTo(650, 120);
-    ctx.lineTo(800, 300);
-    ctx.lineTo(1066, SCREEN_HEIGHT / 2);
-    ctx.fill();
-
-    // Cityscape (More detailed buildings)
-    if (cityscapeRef.current.length === 0) {
-      for (let i = 0; i < 20; i++) {
-        cityscapeRef.current.push({ 
-          x: i * 60, 
-          h: 40 + Math.random() * 180, 
-          w: 30 + Math.random() * 40,
-          windows: Array.from({ length: 10 }, () => Math.random() > 0.7)
-        });
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, SCREEN_HEIGHT / 2);
+      if (trackTheme === 'city') {
+        skyGrad.addColorStop(0, '#0f172a');
+        skyGrad.addColorStop(1, '#1e293b');
+      } else if (trackTheme === 'desert') {
+        skyGrad.addColorStop(0, '#0ea5e9');
+        skyGrad.addColorStop(1, '#bae6fd');
+      } else {
+        skyGrad.addColorStop(0, '#334155');
+        skyGrad.addColorStop(1, '#64748b');
       }
-    }
-    
-    cityscapeRef.current.forEach(b => {
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(b.x, SCREEN_HEIGHT / 2 - b.h, b.w, b.h);
-      // Windows
-      ctx.fillStyle = '#fef08a';
-      b.windows.forEach((on, i) => {
-        if (on) {
-          const wx = b.x + (i % 2) * (b.w / 2) + 5;
-          const wy = SCREEN_HEIGHT / 2 - b.h + Math.floor(i / 2) * 20 + 5;
-          if (wy < SCREEN_HEIGHT / 2 - 10) {
-            ctx.fillRect(wx, wy, 4, 4);
-          }
-        }
-      });
-    });
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
 
-      // Mountain Shading
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-      ctx.beginPath();
-      ctx.moveTo(150, 120);
-      ctx.lineTo(300, 300);
-      ctx.lineTo(150, 300);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(450, 80);
-      ctx.lineTo(600, 250);
-      ctx.lineTo(450, 250);
-      ctx.fill();
-
-      // Snow Peaks
-      ctx.fillStyle = '#f8fafc';
-      ctx.beginPath();
-      ctx.moveTo(150, 120);
-      ctx.lineTo(120, 160);
-      ctx.lineTo(180, 160);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(450, 80);
-      ctx.lineTo(420, 120);
-      ctx.lineTo(480, 120);
-      ctx.fill();
+      // Draw Theme-specific background
+      if (trackTheme === 'city') {
+        drawCityscape(ctx, position);
+      } else if (trackTheme === 'desert') {
+        drawDunes(ctx, position);
+      } else {
+        drawMountains(ctx, position);
+      }
 
       const baseSegment = findSegment(position);
       const basePercent = (position % SEGMENT_LENGTH) / SEGMENT_LENGTH;
@@ -810,66 +894,14 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         x += dx;
         dx += segment.curve;
 
-        // Clip segments that are behind a hill (their projected Y is below the highest drawn point, meaning a larger Y value)
-        // Also skip if it's behind the camera (p1.screen.y >= p2.screen.y)
         if (segment.p1.screen.y <= segment.p2.screen.y || segment.p2.screen.y >= maxY) continue;
 
-        // Draw Grass (with gradient)
-        const grassGrad = ctx.createLinearGradient(0, segment.p2.screen.y, 0, segment.p1.screen.y);
-        let grassColor = segment.color.grass;
-        if (weather === 'fog') grassColor = shadeColor(grassColor, -40);
-        if (weather === 'rain') grassColor = shadeColor(grassColor, -20);
-        
-        grassGrad.addColorStop(0, grassColor);
-        grassGrad.addColorStop(1, shadeColor(grassColor, -20));
-        ctx.fillStyle = grassGrad;
+        // Draw Grass
+        ctx.fillStyle = segment.color.grass;
         ctx.fillRect(0, segment.p2.screen.y, SCREEN_WIDTH, segment.p1.screen.y - segment.p2.screen.y);
 
-        // Draw Road (with texture)
-        let roadColor = segment.color.road;
-        if (weather === 'rain') roadColor = shadeColor(roadColor, -50); // Wet road
-        drawPolygon(ctx, segment.p1.screen.x, segment.p1.screen.y, segment.p1.screen.w, segment.p2.screen.x, segment.p2.screen.y, segment.p2.screen.w, roadColor, true);
-
-        // Specular highlight on road
-        if (n < 50) {
-          const highlightAlpha = weather === 'rain' ? '0.15' : '0.05';
-          ctx.fillStyle = `rgba(255, 255, 255, ${highlightAlpha})`;
-          ctx.beginPath();
-          ctx.moveTo(segment.p1.screen.x - segment.p1.screen.w * 0.5, segment.p1.screen.y);
-          ctx.lineTo(segment.p2.screen.x - segment.p2.screen.w * 0.5, segment.p2.screen.y);
-          ctx.lineTo(segment.p2.screen.x + segment.p2.screen.w * 0.5, segment.p2.screen.y);
-          ctx.lineTo(segment.p1.screen.x + segment.p1.screen.w * 0.5, segment.p1.screen.y);
-          ctx.fill();
-        }
-
-        // Fog Overlay per segment
-        if (weather === 'fog') {
-          const fogAlpha = Math.min(1, n / (DRAW_DISTANCE * 0.8));
-          ctx.fillStyle = `rgba(100, 116, 139, ${fogAlpha})`;
-          ctx.fillRect(0, segment.p2.screen.y, SCREEN_WIDTH, segment.p1.screen.y - segment.p2.screen.y + 1);
-        }
-
-        // Slipstream Particles Rendering (Wind Trails)
-        slipstreamParticles.forEach(p => {
-          if (Math.floor(p.z / SEGMENT_LENGTH) % segments.length === segment.index) {
-            const pX = segment.p1.screen.x + (segment.p1.screen.w * p.x);
-            const pY = segment.p1.screen.y;
-            const pW = segment.p1.screen.w * 0.15;
-            
-            ctx.strokeStyle = `rgba(147, 197, 253, ${p.opacity})`; // Light blue wind
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.moveTo(pX - pW, pY);
-            ctx.lineTo(pX + pW, pY);
-            ctx.stroke();
-            
-            // Vertical streaks for motion
-            ctx.beginPath();
-            ctx.moveTo(pX, pY);
-            ctx.lineTo(pX + (Math.random() - 0.5) * 10, pY - 20);
-            ctx.stroke();
-          }
-        });
+        // Draw Road
+        drawPolygon(ctx, segment.p1.screen.x, segment.p1.screen.y, segment.p1.screen.w, segment.p2.screen.x, segment.p2.screen.y, segment.p2.screen.w, segment.color.road, true);
 
         // Rumble
         const r1 = segment.p1.screen.w / 10;
@@ -887,7 +919,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         maxY = segment.p1.screen.y;
       }
 
-      // Render Sprites (Trees and Opponents)
+      // Render Sprites & Cars (Back to Front)
       for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
         const segment = segments[(baseSegment.index + n) % segments.length];
         
@@ -900,43 +932,48 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
           drawCheckpoint(ctx, archX, archY, archW, archH, segment.passed || false);
         }
 
-        // Trees
+        // Scenery
         segment.sprites.forEach(sprite => {
           const spriteX = segment.p1.screen.x + (segment.p1.screen.w * sprite.offset);
           const spriteY = segment.p1.screen.y;
           const spriteW = (sprite.scale * segment.p1.screen.w / 2);
           const spriteH = spriteW * 1.5;
-          drawTree(ctx, spriteX, spriteY, spriteW, spriteH);
+          
+          if (sprite.source === 'tree') drawTree(ctx, spriteX, spriteY, spriteW, spriteH);
+          else if (sprite.source === 'pine') drawPine(ctx, spriteX, spriteY, spriteW, spriteH);
+          else if (sprite.source === 'cactus') drawCactus(ctx, spriteX, spriteY, spriteW, spriteH);
+          else if (sprite.source === 'building') drawBuilding(ctx, spriteX, spriteY, spriteW, spriteH);
+          else if (sprite.source === 'lamp') drawLamp(ctx, spriteX, spriteY, spriteW, spriteH);
+          else if (sprite.source === 'rock') drawRock(ctx, spriteX, spriteY, spriteW, spriteH);
         });
 
         // Other Players
         Object.values(otherPlayersRef.current).forEach((player: any) => {
           const playerSegment = findSegment(player.z);
-          // Only render if in view
-          if (playerSegment.index >= baseSegment.index && playerSegment.index < baseSegment.index + DRAW_DISTANCE) {
+          if (playerSegment.index === segment.index) {
             const relativeZ = player.z - position;
             if (relativeZ > 0) {
               const scale = CAMERA_DEPTH / (relativeZ / SEGMENT_LENGTH);
-              const screenX = Math.round((SCREEN_WIDTH / 2) + (scale * player.x * SCREEN_WIDTH / 2));
-              const screenY = Math.round((SCREEN_HEIGHT / 2) - (scale * (playerSegment.p1.world.y - CAMERA_HEIGHT) * SCREEN_HEIGHT / 2));
+              const screenX = Math.round((SCREEN_WIDTH / 2) + (scale * (player.x * ROAD_WIDTH - (playerX * ROAD_WIDTH - x)) * SCREEN_WIDTH / 2));
+              const screenY = Math.round((SCREEN_HEIGHT / 2) - (scale * (playerSegment.p1.world.y - (CAMERA_HEIGHT + playerY)) * SCREEN_HEIGHT / 2));
               const screenW = Math.round(scale * CAR_WIDTH * SCREEN_WIDTH / 2);
               const screenH = screenW * 0.6;
-              
               drawCar(ctx, screenX, screenY, screenW, screenH, player.carConfig, true, 0, 0);
             }
           }
         });
 
         // Opponents
-        opponents.forEach(opp => {
+        opponents.forEach((opp, idx) => {
           if (findSegment(opp.z).index === segment.index) {
             const oppX = segment.p1.screen.x + (segment.p1.screen.w * opp.offset);
             const oppY = segment.p1.screen.y;
             const oppW = (segment.p1.screen.w * (CAR_WIDTH / ROAD_WIDTH));
             const oppH = oppW * 0.6;
             
+            const models: CarModelType[] = ['speedster', 'drifter', 'tank', 'interceptor'];
             const oppConfig: CarConfig = {
-              model: 'speedster',
+              model: models[idx % models.length],
               color: opp.color,
               spoiler: 'none',
               rims: 'silver',
@@ -969,7 +1006,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         }
       }
 
-      // Tire Smoke Rendering (Behind car)
+      // Particle Rendering
       smokeParticles.forEach(p => {
         ctx.fillStyle = p.color;
         ctx.globalAlpha = Math.max(0, p.life);
@@ -977,6 +1014,21 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         ctx.fill();
       });
+
+      turboParticles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      sparkParticles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+      });
+
       ctx.globalAlpha = 1.0;
 
       drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 180, 110, carConfig, isBraking, damage, driftAngle);
@@ -999,6 +1051,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       vignette.addColorStop(1, 'rgba(0,0,0,0.5)');
       ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+      ctx.restore();
     };
 
     const loop = () => {
@@ -1164,6 +1218,107 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     drawFoliage(x - w * 0.4, y - h * 0.5, w * 0.6, '#15803d');
     drawFoliage(x + w * 0.4, y - h * 0.5, w * 0.6, '#15803d');
     drawFoliage(x, y - h * 0.9, w * 0.5, '#22c55e');
+  };
+
+  const drawPine = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+    ctx.fillStyle = '#2d1b0f';
+    ctx.fillRect(x - w / 10, y - h * 0.2, w / 5, h * 0.2);
+    ctx.fillStyle = '#064e3b';
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2 * (1 - i * 0.2), y - h * 0.2 - i * h * 0.2);
+      ctx.lineTo(x + w / 2 * (1 - i * 0.2), y - h * 0.2 - i * h * 0.2);
+      ctx.lineTo(x, y - h * 0.5 - i * h * 0.2);
+      ctx.fill();
+    }
+  };
+
+  const drawCactus = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+    ctx.fillStyle = '#166534';
+    ctx.fillRect(x - w / 6, y - h, w / 3, h);
+    ctx.fillRect(x - w / 2, y - h * 0.7, w / 2, w / 4);
+    ctx.fillRect(x - w / 2, y - h * 0.9, w / 6, h * 0.2);
+    ctx.fillRect(x + w / 6, y - h * 0.5, w / 2, w / 4);
+    ctx.fillRect(x + w / 2, y - h * 0.7, w / 6, h * 0.2);
+  };
+
+  const drawBuilding = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(x - w / 2, y - h, w, h);
+    ctx.fillStyle = '#334155';
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 3; col++) {
+        if (Math.random() > 0.3) {
+          ctx.fillStyle = Math.random() > 0.8 ? '#fef08a' : '#334155';
+          ctx.fillRect(x - w / 2 + 10 + col * (w / 4), y - h + 10 + row * (h / 6), w / 6, h / 10);
+        }
+      }
+    }
+  };
+
+  const drawLamp = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+    ctx.fillStyle = '#475569';
+    ctx.fillRect(x - 2, y - h, 4, h);
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath();
+    ctx.arc(x, y - h, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = '#fef08a';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  };
+
+  const drawRock = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+    ctx.fillStyle = '#4b5563';
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2, y);
+    ctx.lineTo(x - w / 3, y - h);
+    ctx.lineTo(x + w / 4, y - h * 0.8);
+    ctx.lineTo(x + w / 2, y);
+    ctx.fill();
+  };
+
+  const drawCityscape = (ctx: CanvasRenderingContext2D, position: number) => {
+    const offset = (position / 100) % 1000;
+    ctx.fillStyle = '#0f172a';
+    for (let i = 0; i < 20; i++) {
+      const h = 100 + Math.sin(i * 1.5) * 50 + 100;
+      const x = (i * 100 - offset + 2000) % 2000 - 500;
+      ctx.fillRect(x, SCREEN_HEIGHT / 2 - h, 80, h);
+    }
+  };
+
+  const drawDunes = (ctx: CanvasRenderingContext2D, position: number) => {
+    const offset = (position / 150) % 1000;
+    ctx.fillStyle = '#d97706';
+    for (let i = 0; i < 10; i++) {
+      const x = (i * 300 - offset + 3000) % 3000 - 500;
+      ctx.beginPath();
+      ctx.moveTo(x, SCREEN_HEIGHT / 2);
+      ctx.quadraticCurveTo(x + 150, SCREEN_HEIGHT / 2 - 100, x + 300, SCREEN_HEIGHT / 2);
+      ctx.fill();
+    }
+  };
+
+  const drawMountains = (ctx: CanvasRenderingContext2D, position: number) => {
+    const offset = (position / 200) % 1000;
+    ctx.fillStyle = '#1e293b';
+    for (let i = 0; i < 8; i++) {
+      const x = (i * 400 - offset + 3200) % 3200 - 600;
+      ctx.beginPath();
+      ctx.moveTo(x, SCREEN_HEIGHT / 2);
+      ctx.lineTo(x + 200, SCREEN_HEIGHT / 2 - 200);
+      ctx.lineTo(x + 400, SCREEN_HEIGHT / 2);
+      ctx.fill();
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      ctx.moveTo(x + 150, SCREEN_HEIGHT / 2 - 150);
+      ctx.lineTo(x + 200, SCREEN_HEIGHT / 2 - 200);
+      ctx.lineTo(x + 250, SCREEN_HEIGHT / 2 - 150);
+      ctx.fill();
+      ctx.fillStyle = '#1e293b';
+    }
   };
 
   return (

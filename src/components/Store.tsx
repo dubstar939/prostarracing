@@ -81,26 +81,26 @@ export default function Store({ money, setMoney, inventory, setInventory, onBack
   return (
     <div className="fixed inset-0 bg-zinc-950 text-white flex flex-col overflow-hidden overflow-y-auto">
       {/* Header */}
-      <div className="p-6 flex items-center justify-between border-b border-zinc-900 bg-black/50 backdrop-blur-md sticky top-0 z-10">
+      <div className="p-4 md:p-6 flex items-center justify-between border-b border-zinc-900 bg-black/50 backdrop-blur-md sticky top-0 z-10">
         <button 
           onClick={onBack}
           className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group"
         >
-          <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-          <span className="uppercase font-bold tracking-widest text-sm">Main Menu</span>
+          <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 group-hover:-translate-x-1 transition-transform" />
+          <span className="uppercase font-bold tracking-widest text-[10px] md:text-sm">Menu</span>
         </button>
         
         <div className="text-center">
-          <h1 className="text-3xl font-black italic uppercase tracking-tighter text-cyan-400">Parts Store</h1>
-          <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Upgrade your performance</p>
+          <h1 className="text-xl md:text-3xl font-black italic uppercase tracking-tighter text-cyan-400">Parts Store</h1>
+          <p className="hidden sm:block text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Upgrade your performance</p>
         </div>
 
-        <div className="bg-zinc-900 px-4 py-2 rounded-sm border border-zinc-800">
-          <span className="text-emerald-400 font-mono font-bold">${money.toLocaleString()}</span>
+        <div className="bg-zinc-900 px-3 py-1 md:px-4 md:py-2 rounded-sm border border-zinc-800">
+          <span className="text-emerald-400 font-mono font-bold text-sm md:text-base">${money.toLocaleString()}</span>
         </div>
       </div>
 
-      <div className="max-w-6xl w-full mx-auto p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="max-w-6xl w-full mx-auto p-4 md:p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
         {renderPartList('engine', <Wrench size={24} />, 'Engine Upgrades')}
         {renderPartList('tires', <CircleDashed size={24} />, 'Tire Compounds')}
         {renderPartList('turbo', <Zap size={24} />, 'Turbochargers')}

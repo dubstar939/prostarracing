@@ -78,28 +78,28 @@ export default function Garage({ carConfig, setCarConfig, money, setMoney, inven
   return (
     <div className="fixed inset-0 bg-zinc-950 text-white flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="p-6 flex items-center justify-between border-bottom border-zinc-900 bg-black/50 backdrop-blur-md">
+      <div className="p-4 md:p-6 flex items-center justify-between border-b border-zinc-900 bg-black/50 backdrop-blur-md">
         <button 
           onClick={onBack}
           className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group"
         >
-          <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-          <span className="uppercase font-bold tracking-widest text-sm">Main Menu</span>
+          <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 group-hover:-translate-x-1 transition-transform" />
+          <span className="uppercase font-bold tracking-widest text-[10px] md:text-sm">Menu</span>
         </button>
         
         <div className="text-center">
-          <h1 className="text-3xl font-black italic uppercase tracking-tighter">The Garage</h1>
-          <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Customize your ride</p>
+          <h1 className="text-xl md:text-3xl font-black italic uppercase tracking-tighter">The Garage</h1>
+          <p className="hidden sm:block text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Customize your ride</p>
         </div>
 
-        <div className="bg-zinc-900 px-4 py-2 rounded-sm border border-zinc-800">
-          <span className="text-emerald-400 font-mono font-bold">${money.toLocaleString()}</span>
+        <div className="bg-zinc-900 px-3 py-1 md:px-4 md:py-2 rounded-sm border border-zinc-800">
+          <span className="text-emerald-400 font-mono font-bold text-sm md:text-base">${money.toLocaleString()}</span>
         </div>
       </div>
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Preview Area */}
-        <div className="flex-1 relative bg-[radial-gradient(circle_at_center,rgba(39,39,42,0.5)_0%,transparent_100%)]">
+        <div className="flex-1 relative bg-[radial-gradient(circle_at_center,rgba(39,39,42,0.5)_0%,transparent_100%)] min-h-[300px] lg:min-h-0">
           <canvas 
             ref={canvasRef} 
             width={800} 
@@ -107,19 +107,19 @@ export default function Garage({ carConfig, setCarConfig, money, setMoney, inven
             className="w-full h-full object-contain"
           />
           
-          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
-            <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white">
+          <div className="absolute bottom-6 md:bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 w-full px-4">
+            <h2 className="text-2xl md:text-4xl font-black italic uppercase tracking-tighter text-white text-center">
               {CAR_MODELS[carConfig.model].name}
             </h2>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap justify-center gap-2 md:gap-4">
               {Object.entries(CAR_MODELS[carConfig.model].stats).map(([stat, val]) => (
                 <div key={stat} className="flex flex-col items-center">
-                  <div className="text-[10px] uppercase font-bold text-zinc-500 mb-1">{stat}</div>
+                  <div className="text-[8px] md:text-[10px] uppercase font-bold text-zinc-500 mb-1">{stat}</div>
                   <div className="flex gap-0.5">
                     {[...Array(10)].map((_, i) => (
                       <div 
                         key={i} 
-                        className={`w-3 h-1 ${i < (val as number) ? 'bg-cyan-400' : 'bg-zinc-800'}`}
+                        className={`w-2 h-0.5 md:w-3 md:h-1 ${i < (val as number) ? 'bg-cyan-400' : 'bg-zinc-800'}`}
                       />
                     ))}
                   </div>
@@ -130,14 +130,14 @@ export default function Garage({ carConfig, setCarConfig, money, setMoney, inven
         </div>
 
         {/* Customization Panel */}
-        <div className="w-full lg:w-[450px] bg-zinc-900/50 backdrop-blur-xl border-l border-zinc-800 p-8 flex flex-col gap-8 overflow-y-auto">
+        <div className="w-full lg:w-[450px] bg-zinc-900/50 backdrop-blur-xl border-t lg:border-t-0 lg:border-l border-zinc-800 p-4 md:p-8 flex flex-col gap-6 md:gap-8 overflow-y-auto max-h-[50vh] lg:max-h-full">
           {/* Tabs */}
-          <div className="flex gap-2 p-1 bg-black rounded-sm border border-zinc-800">
+          <div className="flex flex-wrap gap-1 p-1 bg-black rounded-sm border border-zinc-800">
             {(['model', 'paint', 'decals', 'bodykit', 'performance'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`flex-1 py-2 text-[10px] uppercase font-bold tracking-widest transition-all rounded-sm ${
+                className={`flex-1 min-w-[60px] py-2 text-[8px] md:text-[10px] uppercase font-bold tracking-widest transition-all rounded-sm ${
                   activeTab === tab ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
               >
