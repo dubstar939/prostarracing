@@ -207,7 +207,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       percent: 0,
       lap: 1,
       color: ['#ef4444', '#3b82f6', '#facc15', '#a855f7', '#ec4899', '#f97316', '#06b6d4', '#8b5cf6'][Math.floor(Math.random() * 8)],
-      plate: generatePlate()
+      plate: generatePlate(),
+      visualAngle: 0
     }));
 
     // Input
@@ -513,11 +514,32 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
 
       // Trigger Smoke & Drift Mechanic
       const isBraking = keysRef.current['ArrowDown'] || keysRef.current['KeyS'];
+      const isAccelerating = keysRef.current['ArrowUp'] || keysRef.current['KeyW'];
       const isSteering = keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] || keysRef.current['ArrowRight'] || keysRef.current['KeyD'] || (useTilt && Math.abs(tiltRef.current) > 0.1);
       const isDrifting = isBraking && isSteering && speed > maxSpeed * 0.2;
 
-      // Visual Drift Angle
-      const targetDriftAngle = isDrifting ? (keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] ? -0.4 : 0.4) : 0;
+      // Start Smoke Effect
+      const raceTime = (Date.now() - startTime) / 1000;
+      if (raceTime < 2 && speed < 5000 && isAccelerating) {
+        for (let i = 0; i < 4; i++) {
+          smokeParticles.push({
+            x: SCREEN_WIDTH / 2 + (Math.random() - 0.5) * 140,
+            y: SCREEN_HEIGHT - 50,
+            vx: (Math.random() - 0.5) * 15,
+            vy: -Math.random() * 8 - 4,
+            life: 1.0 + Math.random() * 0.5,
+            size: 25 + Math.random() * 25,
+            color: 'rgba(220, 220, 220, 0.6)'
+          });
+        }
+      }
+
+      // Visual Steering/Drift Angle
+      const steeringInput = (keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] ? -1 : 0) + 
+                          (keysRef.current['ArrowRight'] || keysRef.current['KeyD'] ? 1 : 0) + 
+                          (useTilt ? tiltRef.current : 0);
+      const targetSteerAngle = steeringInput * 0.12;
+      const targetDriftAngle = isDrifting ? (steeringInput < 0 ? -0.4 : 0.4) : targetSteerAngle;
       driftAngle = driftAngle + (targetDriftAngle - driftAngle) * 0.1;
 
       // Haptic Feedback
@@ -664,36 +686,80 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         const oppSegment = findSegment(opp.z);
         const oppSpeedPercent = opp.speed / maxSpeed;
 
-        // 1. Look Ahead & Speed Control
+        // 1. Look Ahead & Speed Control (Sophisticated Braking)
         // AI looks ahead to adjust speed for curves
-        let lookAheadZ = opp.z + 1500;
+        let lookAheadZ = opp.z + 2000;
         let lookAheadSegment = findSegment(lookAheadZ);
         let curveAhead = Math.abs(lookAheadSegment.curve);
         
         // Target speed based on curve
-        const baseTargetSpeed = 8000 + (level * 200);
-        const curvePenalty = curveAhead * 4000;
-        const targetSpeed = Math.max(4000, baseTargetSpeed - curvePenalty);
+        const baseTargetSpeed = 9000 + (level * 300);
+        const curvePenalty = curveAhead * 5000;
+        let targetSpeed = Math.max(5000, baseTargetSpeed - curvePenalty);
         
-        // Smoothly adjust speed (Acceleration/Braking)
-        if (opp.speed < targetSpeed) {
-          opp.speed += 2000 * dt;
-        } else {
-          opp.speed -= 4000 * dt;
-        }
-
-        // 2. Path Following (PID-like steering)
-        // AI tries to stay near the center but takes a better line through curves
-        const idealOffset = -oppSegment.curve * 0.5; // Lean into the curve
-        const steeringError = idealOffset - opp.offset;
-        opp.offset += steeringError * 2.0 * dt;
-
-        // 3. Player Awareness & Overtaking
+        // Reactive to player position and speed
         let zDiff = opp.z - position;
         if (zDiff < -trackLength / 2) zDiff += trackLength;
         if (zDiff > trackLength / 2) zDiff -= trackLength;
 
-        // Slipstream Detection
+        // If player is ahead and close, adjust speed to avoid constant ramming or to prepare for overtake
+        if (zDiff < 0 && zDiff > -2500) {
+          if (speed < opp.speed && Math.abs(opp.offset - playerX) < 0.4) {
+            targetSpeed = Math.min(targetSpeed, speed + 1000);
+          }
+        }
+
+        // Smoothly adjust speed (Acceleration/Braking)
+        if (opp.speed < targetSpeed) {
+          opp.speed += 2500 * dt;
+        } else {
+          opp.speed -= 5000 * dt; // Stronger braking for turns
+        }
+
+        // 2. Path Following & Dynamic Lane Changing
+        // AI tries to take the racing line but reacts to player
+        let desiredOffset = -oppSegment.curve * 0.6; // Racing line (lean into curve)
+
+        // Overtaking / Blocking logic
+        if (Math.abs(zDiff) < 3000) {
+          if (zDiff < 0) { 
+            // AI is behind: Aggressive overtaking
+            if (Math.abs(opp.offset - playerX) < 0.6) {
+              // Choose a side to pass
+              const passSide = playerX > 0 ? -0.8 : 0.8;
+              desiredOffset = playerX + passSide;
+              opp.speed += 1500 * dt; // Overtake boost
+            }
+          } else { 
+            // AI is ahead: Defensive blocking
+            if (Math.abs(opp.offset - playerX) < 1.0) {
+              desiredOffset = playerX; // Mirror player to block
+            }
+          }
+        }
+
+        // Avoid other AI cars
+        opponents.forEach(other => {
+          if (other === opp) return;
+          let ozDiff = opp.z - other.z;
+          if (ozDiff < -trackLength / 2) ozDiff += trackLength;
+          if (ozDiff > trackLength / 2) ozDiff -= trackLength;
+          
+          if (Math.abs(ozDiff) < 1200 && Math.abs(opp.offset - other.offset) < 0.4) {
+            desiredOffset = other.offset > 0 ? other.offset - 0.7 : other.offset + 0.7;
+          }
+        });
+
+        // Smoothly apply steering
+        const steerDiff = (desiredOffset - opp.offset);
+        opp.offset += steerDiff * 1.8 * dt;
+        opp.offset = Math.max(-1.4, Math.min(1.4, opp.offset));
+        
+        // Update visual angle for AI
+        const targetAngle = steerDiff * 0.5 + (oppSegment.curve * 0.2);
+        opp.visualAngle = opp.visualAngle + (targetAngle - opp.visualAngle) * 0.1;
+
+        // 3. Collision Detection
         checkSlipstream(opp.z, opp.offset);
 
         // Collision Detection
@@ -983,7 +1049,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
               tires: 1,
               turbo: 1
             };
-            drawCar(ctx, oppX, oppY, oppW, oppH, oppConfig, true, 0, 0);
+            drawCar(ctx, oppX, oppY, oppW, oppH, oppConfig, true, 0, opp.visualAngle || 0);
           }
         });
       }

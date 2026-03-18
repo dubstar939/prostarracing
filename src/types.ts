@@ -42,6 +42,9 @@ export const PERFORMANCE_PARTS = {
     { level: 3, name: 'V8 Swap', price: 6000, boost: 25 },
     { level: 4, name: 'Racing V8', price: 12000, boost: 45 },
     { level: 5, name: 'Hypercar V12', price: 25000, boost: 70 },
+    { level: 6, name: 'Supercharged V12', price: 45000, boost: 100 },
+    { level: 7, name: 'Electric Hybrid', price: 75000, boost: 140 },
+    { level: 8, name: 'Rocket Engine', price: 120000, boost: 200 },
   ],
   tires: [
     { level: 1, name: 'Street Tires', price: 0, grip: 0 },
