@@ -5,9 +5,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { RacingGame, TrackThemeType } from './components/RacingGame';
-import { Trophy, Flag, Settings, Play, Info, Users, Globe, Loader2, Map, ShoppingBag, ChevronRight, Gauge, Zap } from 'lucide-react';
+import { Trophy, Flag, Settings, Play, Info, Loader2, Map, ShoppingBag, ChevronRight, Gauge, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { socketService } from './services/socketService';
 import { GoogleGenAI } from '@google/genai';
 import { CarConfig, CAR_MODELS, CarModelType, RaceMode, Inventory } from './types';
 
@@ -69,7 +68,7 @@ import Garage from './components/Garage';
 import Store from './components/Store';
 
 export default function App() {
-  const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'options' | 'mode-select' | 'garage' | 'store'>('title');
+  const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'options' | 'mode-select' | 'garage' | 'store'>('title');
   const [level, setLevel] = useState(() => {
     try {
       const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('racing_level') : null;
@@ -158,25 +157,10 @@ export default function App() {
       localStorage.setItem('racing_inventory', JSON.stringify(inventory));
     }
   }, [inventory]);
-  const [isMultiplayer, setIsMultiplayer] = useState(false);
-  const [roomId, setRoomId] = useState('');
   const [trackTheme, setTrackTheme] = useState<TrackThemeType>('neon_city');
   const coverImage = useCoverImage();
 
   const startGame = () => {
-    setIsMultiplayer(false);
-    setGameState('playing');
-  };
-
-  const startMultiplayer = () => {
-    setGameState('lobby');
-  };
-
-  const joinRoom = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!roomId.trim()) return;
-    setIsMultiplayer(true);
-    socketService.connect();
     setGameState('playing');
   };
 
@@ -391,16 +375,6 @@ export default function App() {
                 </button>
               ))}
 
-              <div className="flex items-center justify-center mt-2">
-                <button
-                  onClick={() => setGameState('lobby')}
-                  className="w-full group relative flex items-center justify-center gap-3 bg-zinc-900 text-white font-bold py-4 px-6 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95"
-                >
-                  <Users className="w-5 h-5 text-cyan-400" />
-                  <span className="uppercase tracking-tight text-sm">Multiplayer</span>
-                </button>
-              </div>
-
               <button
                 onClick={() => setGameState('menu')}
                 className="mt-4 text-zinc-500 hover:text-white font-bold uppercase tracking-widest text-xs transition-colors"
@@ -476,51 +450,6 @@ export default function App() {
           </motion.div>
         )}
 
-        {gameState === 'lobby' && (
-          <motion.div
-            key="lobby"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="text-center space-y-8 max-w-md w-full px-6"
-          >
-            <div className="space-y-2 text-left">
-              <h2 className="text-4xl font-black italic uppercase tracking-tighter">Multiplayer</h2>
-              <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest">Enter room ID to join or create</p>
-            </div>
-
-            <form onSubmit={joinRoom} className="space-y-4">
-              <div className="relative">
-                <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
-                <input
-                  type="text"
-                  value={roomId}
-                  onChange={(e) => setRoomId(e.target.value)}
-                  placeholder="ROOM_ID"
-                  className="w-full bg-zinc-900 border border-zinc-800 py-4 pl-12 pr-4 rounded-sm font-mono text-lg tracking-widest focus:outline-none focus:border-white/40 transition-colors uppercase"
-                  autoFocus
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => setGameState('menu')}
-                  className="bg-zinc-900 text-zinc-400 font-bold py-4 rounded-sm border border-zinc-800 hover:bg-zinc-800 transition-colors uppercase"
-                >
-                  Back
-                </button>
-                <button
-                  type="submit"
-                  className="bg-white text-black font-bold py-4 rounded-sm hover:bg-zinc-200 transition-colors uppercase"
-                >
-                  Join Room
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        )}
-
-
         {gameState === 'playing' && (
           <motion.div
             key="playing"
@@ -537,8 +466,6 @@ export default function App() {
               mode={raceMode}
               onRaceEnd={handleRaceEnd} 
               onBack={() => setGameState('menu')}
-              isMultiplayer={isMultiplayer}
-              roomId={roomId}
             />
           </motion.div>
         )}

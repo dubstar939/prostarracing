@@ -3,7 +3,6 @@ import { motion } from 'motion/react';
 import { audioManager } from '../services/audioService';
 import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Zap, Monitor } from 'lucide-react';
 
-import { socketService } from '../services/socketService';
 import { drawCar, shadeColor } from '../utils/carRenderer';
 
 import { CarConfig, RaceMode, PERFORMANCE_PARTS, CarModelType } from '../types';
@@ -20,8 +19,6 @@ interface RacingGameProps {
   mode: RaceMode;
   onRaceEnd: (position: number, time: number, score?: number) => void;
   onBack: () => void;
-  isMultiplayer?: boolean;
-  roomId?: string;
 }
 
 // Pseudo-3D Road Constants
@@ -51,13 +48,10 @@ interface Sprite {
   scale: number;
 }
 
-export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carConfig, setCarConfig, mode, onRaceEnd, onBack, isMultiplayer, roomId }) => {
+export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carConfig, setCarConfig, mode, onRaceEnd, onBack }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isReady, setIsReady] = useState(false);
-  const [isLocalReady, setIsLocalReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [otherPlayers, setOtherPlayers] = useState<{ [key: string]: any }>({});
-  const otherPlayersRef = useRef<{ [key: string]: any }>({});
   const [weather, setWeather] = useState<'clear' | 'rain' | 'fog'>('clear');
 
   const [hud, setHud] = useState({
@@ -96,41 +90,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
-
-  useEffect(() => {
-    if (isMultiplayer && roomId) {
-      socketService.onRoomUpdate((players) => {
-        const others = { ...players };
-        delete others[socketService.id!];
-        setOtherPlayers(others);
-        otherPlayersRef.current = others;
-      });
-
-      socketService.onPlayerMoved((player) => {
-        if (player.id !== socketService.id) {
-          otherPlayersRef.current[player.id] = player;
-          setOtherPlayers({ ...otherPlayersRef.current });
-        }
-      });
-
-      socketService.onStartCountdown(() => {
-        let count = 3;
-        setCountdown(count);
-        const timer = setInterval(() => {
-          count--;
-          if (count === 0) {
-            clearInterval(timer);
-            setCountdown(null);
-            setIsReady(true);
-          } else {
-            setCountdown(count);
-          }
-        }, 1000);
-      });
-
-      socketService.joinRoom(roomId, { carConfig });
-    }
-  }, [isMultiplayer, roomId, carConfig]);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -912,23 +871,11 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       // Calculate Leaderboard
       const allRacers = [
         { name: 'You', distance: (lap - 1) * trackLength + position, lap: lap, isPlayer: true, id: 'local' },
-        ...opponents.map(o => ({ name: o.name, distance: (o.lap - 1) * trackLength + o.z, lap: o.lap, isPlayer: false, id: o.name })),
-        ...Object.values(otherPlayersRef.current).map((p: any) => ({ 
-          name: p.id.substring(0, 4), 
-          distance: (p.lap - 1) * trackLength + p.z, 
-          lap: p.lap,
-          isPlayer: false, 
-          id: p.id 
-        }))
+        ...opponents.map(o => ({ name: o.name, distance: (o.lap - 1) * trackLength + o.z, lap: o.lap, isPlayer: false, id: o.name }))
       ];
       
       allRacers.sort((a, b) => b.distance - a.distance);
       const playerRank = allRacers.findIndex(r => r.isPlayer) + 1;
-
-      // Check slipstream for other players too
-      Object.values(otherPlayersRef.current).forEach((p: any) => {
-        checkSlipstream(p.z, p.x);
-      });
 
       setHud(prev => ({
         ...prev,
@@ -943,8 +890,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         checkpointTime: checkpointTime,
         progress: position / trackLength,
         opponents: [
-          ...opponents.map(o => o.z / trackLength),
-          ...Object.values(otherPlayersRef.current).map((p: any) => (p.z || 0) / trackLength)
+          ...opponents.map(o => o.z / trackLength)
         ]
       }));
     };
@@ -1123,22 +1069,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
           else if (sprite.source === 'rock') drawRock(ctx, spriteX, spriteY, spriteW, spriteH);
         });
 
-        // Other Players
-        Object.values(otherPlayersRef.current).forEach((player: any) => {
-          const playerSegment = findSegment(player.z);
-          if (playerSegment.index === segment.index) {
-            const relativeZ = player.z - position;
-            if (relativeZ > 0) {
-              const scale = CAMERA_DEPTH / (relativeZ / SEGMENT_LENGTH);
-              const screenX = Math.round((SCREEN_WIDTH / 2) + (scale * (player.x * ROAD_WIDTH - (playerX * ROAD_WIDTH - x)) * SCREEN_WIDTH / 2));
-              const screenY = Math.round((SCREEN_HEIGHT / 2) - (scale * (playerSegment.p1.world.y - (CAMERA_HEIGHT + playerY)) * SCREEN_HEIGHT / 2));
-              const screenW = Math.round(scale * CAR_WIDTH * SCREEN_WIDTH / 2);
-              const screenH = screenW * 0.6;
-              drawCar(ctx, screenX, screenY, screenW, screenH, player.carConfig, true, 0, 0, player.isBoosting || false);
-            }
-          }
-        });
-
         // Opponents
         opponents.forEach((opp, idx) => {
           if (findSegment(opp.z).index === segment.index) {
@@ -1237,16 +1167,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       update(dt);
       draw();
 
-      if (isMultiplayer && roomId) {
-        socketService.updateState(roomId, {
-          z: position,
-          x: playerX,
-          speed,
-          lap,
-          carConfig
-        });
-      }
-
       animationFrameId = requestAnimationFrame(loop);
     };
 
@@ -1257,9 +1177,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      if (isMultiplayer) {
-        socketService.disconnect();
-      }
     };
   }, [level, onRaceEnd, isReady, carConfig, aspectRatio]);
 
@@ -1267,23 +1184,18 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     audioManager.init();
     audioManager.startMusic();
     
-    if (isMultiplayer && roomId) {
-      setIsLocalReady(true);
-      socketService.setReady(roomId);
-    } else {
-      let count = 3;
-      setCountdown(count);
-      const timer = setInterval(() => {
-        count--;
-        if (count === 0) {
-          clearInterval(timer);
-          setCountdown(null);
-          setIsReady(true);
-        } else {
-          setCountdown(count);
-        }
-      }, 1000);
-    }
+    let count = 3;
+    setCountdown(count);
+    const timer = setInterval(() => {
+      count--;
+      if (count === 0) {
+        clearInterval(timer);
+        setCountdown(null);
+        setIsReady(true);
+      } else {
+        setCountdown(count);
+      }
+    }, 1000);
   };
 
   const toggleMute = () => {
@@ -1722,13 +1634,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
                 TIME: {Math.ceil(hud.checkpointTime)}s
               </div>
               
-              {isMultiplayer && roomId && (
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest">Room: {roomId}</div>
-                </div>
-              )}
-              
               {/* Mini Map */}
               <div className="mt-4 w-40 h-28 border-2 border-white/80 rounded-xl relative overflow-hidden bg-black/30 backdrop-blur-sm flex flex-col items-center justify-center p-2">
                 <div className="text-[8px] font-mono text-white/40 uppercase tracking-widest mb-1">Track Map</div>
@@ -1966,11 +1871,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Settings</h3>
-                {isMultiplayer && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-zinc-500">Players: {Object.keys(otherPlayers).length + 1}</span>
-                  </div>
-                )}
                 <button 
                   onClick={toggleAspectRatio}
                   className="flex items-center gap-2 px-3 py-1 bg-white/5 border border-white/10 rounded-sm hover:bg-white/10 transition-colors"
@@ -2109,35 +2009,17 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={onBack}
-                disabled={isLocalReady}
-                className="bg-zinc-800 text-zinc-400 font-black py-4 uppercase italic tracking-tighter hover:bg-zinc-700 transition-colors disabled:opacity-50"
+                className="bg-zinc-800 text-zinc-400 font-black py-4 uppercase italic tracking-tighter hover:bg-zinc-700 transition-colors"
               >
                 Back
               </button>
               <button
                 onClick={handleStartRace}
-                disabled={isLocalReady}
-                className={`bg-white text-black font-black py-4 uppercase italic tracking-tighter hover:bg-zinc-200 transition-colors disabled:bg-zinc-500 disabled:text-zinc-300`}
+                className={`bg-white text-black font-black py-4 uppercase italic tracking-tighter hover:bg-zinc-200 transition-colors`}
               >
-                {isLocalReady ? 'Waiting...' : 'Start Race'}
+                Start Race
               </button>
             </div>
-            
-            {isMultiplayer && (
-              <div className="mt-4 space-y-2">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Lobby Status</div>
-                <div className="flex flex-wrap gap-2">
-                  <div className={`px-2 py-1 text-[9px] font-mono border ${isLocalReady ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' : 'bg-zinc-800 border-zinc-700 text-zinc-500'}`}>
-                    YOU: {isLocalReady ? 'READY' : 'WAITING'}
-                  </div>
-                  {Object.values(otherPlayers).map((p: any) => (
-                    <div key={p.id} className={`px-2 py-1 text-[9px] font-mono border ${p.ready ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' : 'bg-zinc-800 border-zinc-700 text-zinc-500'}`}>
-                      {p.id.substring(0, 4)}: {p.ready ? 'READY' : 'WAITING'}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </motion.div>
         </div>
       )}
