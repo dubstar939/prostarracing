@@ -111,7 +111,7 @@ export default function App() {
   }, [inventory]);
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [roomId, setRoomId] = useState('');
-  const [trackTheme, setTrackTheme] = useState<TrackThemeType>('city');
+  const [trackTheme, setTrackTheme] = useState<TrackThemeType>('neon_city');
   const coverImage = useCoverImage();
 
   const startGame = () => {
@@ -378,8 +378,8 @@ export default function App() {
                 <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
                   <Map className="w-4 h-4" /> Track Theme
                 </h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['city', 'desert', 'mountain'] as TrackThemeType[]).map((t) => (
+                <div className="grid grid-cols-2 gap-2">
+                  {(['neon_city', 'coastal_highway', 'desert_canyon', 'cyber_industrial'] as TrackThemeType[]).map((t) => (
                     <button
                       key={t}
                       onClick={() => setTrackTheme(t)}
@@ -389,7 +389,7 @@ export default function App() {
                           : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500'
                       }`}
                     >
-                      {t}
+                      {t.replace('_', ' ')}
                     </button>
                   ))}
                 </div>

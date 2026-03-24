@@ -8,7 +8,9 @@ import { drawCar, shadeColor } from '../utils/carRenderer';
 
 import { CarConfig, RaceMode, PERFORMANCE_PARTS, CarModelType } from '../types';
 
-export type TrackThemeType = 'city' | 'desert' | 'mountain';
+import { BIOMES, TRACK_TILESET } from '../constants/assets';
+
+export type TrackThemeType = 'neon_city' | 'coastal_highway' | 'desert_canyon' | 'cyber_industrial';
 
 interface RacingGameProps {
   level: number;
@@ -278,11 +280,44 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         return seed / 233280;
       };
 
-      // Theme-based colors
+      // Theme-based colors from 939PRO Asset Package
       const themeColors = {
-        city: { road: '#333', grass: '#1e293b', rumble: '#fff', lane: '#fff', altRoad: '#3a3a3a', altGrass: '#0f172a', altRumble: '#000' },
-        desert: { road: '#444', grass: '#f59e0b', rumble: '#fff', lane: '#fff', altRoad: '#4a4a4a', altGrass: '#d97706', altRumble: '#000' },
-        mountain: { road: '#222', grass: '#166534', rumble: '#fff', lane: '#fff', altRoad: '#2a2a2a', altGrass: '#14532d', altRumble: '#000' }
+        neon_city: { 
+          road: BIOMES.NEON_CITY.palette.road, 
+          grass: BIOMES.NEON_CITY.palette.env[0], 
+          rumble: BIOMES.NEON_CITY.palette.neon, 
+          lane: BIOMES.NEON_CITY.palette.highlight, 
+          altRoad: shadeColor(BIOMES.NEON_CITY.palette.road, 10), 
+          altGrass: BIOMES.NEON_CITY.palette.env[1], 
+          altRumble: '#000' 
+        },
+        coastal_highway: { 
+          road: BIOMES.COASTAL_HIGHWAY.palette.road, 
+          grass: BIOMES.COASTAL_HIGHWAY.palette.env[0], 
+          rumble: BIOMES.COASTAL_HIGHWAY.palette.neon, 
+          lane: BIOMES.COASTAL_HIGHWAY.palette.highlight, 
+          altRoad: shadeColor(BIOMES.COASTAL_HIGHWAY.palette.road, 10), 
+          altGrass: BIOMES.COASTAL_HIGHWAY.palette.env[1], 
+          altRumble: '#000' 
+        },
+        desert_canyon: { 
+          road: BIOMES.DESERT_CANYON.palette.road, 
+          grass: BIOMES.DESERT_CANYON.palette.env[0], 
+          rumble: BIOMES.DESERT_CANYON.palette.neon, 
+          lane: BIOMES.DESERT_CANYON.palette.highlight, 
+          altRoad: shadeColor(BIOMES.DESERT_CANYON.palette.road, 10), 
+          altGrass: BIOMES.DESERT_CANYON.palette.env[1], 
+          altRumble: '#000' 
+        },
+        cyber_industrial: { 
+          road: BIOMES.CYBER_INDUSTRIAL.palette.road, 
+          grass: BIOMES.CYBER_INDUSTRIAL.palette.env[0], 
+          rumble: BIOMES.CYBER_INDUSTRIAL.palette.neon, 
+          lane: BIOMES.CYBER_INDUSTRIAL.palette.highlight, 
+          altRoad: shadeColor(BIOMES.CYBER_INDUSTRIAL.palette.road, 10), 
+          altGrass: BIOMES.CYBER_INDUSTRIAL.palette.env[1], 
+          altRumble: '#000' 
+        }
       }[trackTheme];
 
       const addSegment = (curve: number, y: number) => {
@@ -325,22 +360,28 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       addStraight(100);
 
       // Theme-specific layout patterns
-      if (trackTheme === 'city') {
-        // City tracks: Tight turns, many straights
+      if (trackTheme === 'neon_city') {
+        // Neon City: Tight turns, many straights, high density
         for (let i = 0; i < 15; i++) {
           addStraight(50 + random() * 100);
           addCurve(20, 40, 20, (random() > 0.5 ? 1 : -1) * (4 + random() * 4), 0);
         }
-      } else if (trackTheme === 'desert') {
-        // Desert tracks: Long hills, wide curves
+      } else if (trackTheme === 'coastal_highway') {
+        // Coastal: Long sweeping curves, gentle hills
         for (let i = 0; i < 10; i++) {
-          addHill(100, 100, 100, (random() - 0.5) * 80);
-          addCurve(100, 100, 100, (random() - 0.5) * 4, 0);
+          addHill(100, 100, 100, (random() - 0.5) * 40);
+          addCurve(150, 200, 150, (random() - 0.5) * 3, 0);
         }
-      } else {
-        // Mountain tracks: Steep hills, sharp S-curves
+      } else if (trackTheme === 'desert_canyon') {
+        // Desert Canyon: Massive hills, sharp drops
+        for (let i = 0; i < 10; i++) {
+          addHill(100, 100, 100, (random() - 0.5) * 120);
+          addCurve(80, 80, 80, (random() - 0.5) * 5, 0);
+        }
+      } else if (trackTheme === 'cyber_industrial') {
+        // Industrial: Technical S-curves, flat but complex
         for (let i = 0; i < 12; i++) {
-          addHill(50, 50, 50, (random() - 0.5) * 150);
+          addStraight(80);
           addSCurves();
         }
       }
@@ -360,9 +401,16 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
           const side = random() > 0.5 ? 1 : -1;
           const offset = (1.5 + random() * 3) * side;
           let source = 'tree';
-          if (trackTheme === 'city') source = random() > 0.7 ? 'building' : 'lamp';
-          else if (trackTheme === 'desert') source = random() > 0.7 ? 'rock' : 'cactus';
-          else source = random() > 0.7 ? 'rock' : 'pine';
+          
+          if (trackTheme === 'neon_city') {
+            source = random() > 0.6 ? 'building' : 'lamp';
+          } else if (trackTheme === 'coastal_highway') {
+            source = random() > 0.7 ? 'rock' : 'tree'; // Tree will be palm-like
+          } else if (trackTheme === 'desert_canyon') {
+            source = random() > 0.7 ? 'rock' : 'cactus';
+          } else if (trackTheme === 'cyber_industrial') {
+            source = random() > 0.5 ? 'building' : 'lamp'; // Industrial buildings/lamps
+          }
 
           segments[n].sprites.push({ 
             source, 
@@ -929,26 +977,31 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
 
       // Sky (Gradient)
       const skyGrad = ctx.createLinearGradient(0, 0, 0, SCREEN_HEIGHT / 2);
-      if (trackTheme === 'city') {
-        skyGrad.addColorStop(0, '#0f172a');
-        skyGrad.addColorStop(1, '#1e293b');
-      } else if (trackTheme === 'desert') {
-        skyGrad.addColorStop(0, '#0ea5e9');
-        skyGrad.addColorStop(1, '#bae6fd');
+      if (trackTheme === 'neon_city') {
+        skyGrad.addColorStop(0, BIOMES.NEON_CITY.palette.shadow);
+        skyGrad.addColorStop(1, BIOMES.NEON_CITY.palette.env[0]);
+      } else if (trackTheme === 'coastal_highway') {
+        skyGrad.addColorStop(0, BIOMES.COASTAL_HIGHWAY.palette.env[0]);
+        skyGrad.addColorStop(1, BIOMES.COASTAL_HIGHWAY.palette.env[1]);
+      } else if (trackTheme === 'desert_canyon') {
+        skyGrad.addColorStop(0, BIOMES.DESERT_CANYON.palette.env[1]);
+        skyGrad.addColorStop(1, BIOMES.DESERT_CANYON.palette.env[2]);
       } else {
-        skyGrad.addColorStop(0, '#334155');
-        skyGrad.addColorStop(1, '#64748b');
+        skyGrad.addColorStop(0, BIOMES.CYBER_INDUSTRIAL.palette.shadow);
+        skyGrad.addColorStop(1, BIOMES.CYBER_INDUSTRIAL.palette.env[2]);
       }
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
 
       // Draw Theme-specific background
-      if (trackTheme === 'city') {
+      if (trackTheme === 'neon_city') {
         drawCityscape(ctx, position);
-      } else if (trackTheme === 'desert') {
-        drawDunes(ctx, position);
+      } else if (trackTheme === 'coastal_highway') {
+        drawCoastalSunset(ctx, position);
+      } else if (trackTheme === 'desert_canyon') {
+        drawDunes(ctx, position); // Reuse dunes for canyon
       } else {
-        drawMountains(ctx, position);
+        drawIndustrialZone(ctx, position);
       }
 
       const baseSegment = findSegment(position);
@@ -1015,7 +1068,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
           const spriteW = (sprite.scale * segment.p1.screen.w / 2);
           const spriteH = spriteW * 1.5;
           
-          if (sprite.source === 'tree') drawTree(ctx, spriteX, spriteY, spriteW, spriteH);
+          if (sprite.source === 'tree') {
+            if (trackTheme === 'coastal_highway') drawPalmTree(ctx, spriteX, spriteY, spriteW, spriteH);
+            else drawTree(ctx, spriteX, spriteY, spriteW, spriteH);
+          }
           else if (sprite.source === 'pine') drawPine(ctx, spriteX, spriteY, spriteW, spriteH);
           else if (sprite.source === 'cactus') drawCactus(ctx, spriteX, spriteY, spriteW, spriteH);
           else if (sprite.source === 'building') drawBuilding(ctx, spriteX, spriteY, spriteW, spriteH);
@@ -1034,7 +1090,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
               const screenY = Math.round((SCREEN_HEIGHT / 2) - (scale * (playerSegment.p1.world.y - (CAMERA_HEIGHT + playerY)) * SCREEN_HEIGHT / 2));
               const screenW = Math.round(scale * CAR_WIDTH * SCREEN_WIDTH / 2);
               const screenH = screenW * 0.6;
-              drawCar(ctx, screenX, screenY, screenW, screenH, player.carConfig, true, 0, 0);
+              drawCar(ctx, screenX, screenY, screenW, screenH, player.carConfig, true, 0, 0, player.isBoosting || false);
             }
           }
         });
@@ -1058,7 +1114,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
               tires: 1,
               turbo: 1
             };
-            drawCar(ctx, oppX, oppY, oppW, oppH, oppConfig, true, 0, opp.visualAngle || 0);
+            drawCar(ctx, oppX, oppY, oppW, oppH, oppConfig, true, 0, opp.visualAngle || 0, false);
           }
         });
       }
@@ -1106,7 +1162,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
 
       ctx.globalAlpha = 1.0;
 
-      drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 180, 110, carConfig, isBraking, damage, driftAngle);
+      drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 180, 110, carConfig, isBraking, damage, driftAngle, turboActive);
 
       // Rain Rendering
       if (weather === 'rain') {
@@ -1265,6 +1321,30 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         const rw = 10 + Math.random() * 20;
         ctx.fillRect(rx, ry, rw, 2);
       }
+    }
+  };
+
+  const drawPalmTree = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+    // Trunk
+    ctx.fillStyle = '#78350f';
+    ctx.beginPath();
+    ctx.moveTo(x - w * 0.1, y);
+    ctx.lineTo(x - w * 0.05, y - h);
+    ctx.lineTo(x + w * 0.05, y - h);
+    ctx.lineTo(x + w * 0.1, y);
+    ctx.fill();
+    
+    // Fronds
+    ctx.fillStyle = '#166534';
+    for (let i = 0; i < 6; i++) {
+      const angle = (i * Math.PI * 2) / 6;
+      ctx.save();
+      ctx.translate(x, y - h);
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.ellipse(w * 0.3, 0, w * 0.4, w * 0.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
   };
 
@@ -1478,29 +1558,42 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     }
   };
 
-  const drawMountains = (ctx: CanvasRenderingContext2D, position: number) => {
-    const offset = (position / 200) % 1000;
-    for (let i = 0; i < 8; i++) {
-      const x = (i * 400 - offset + 3200) % 3200 - 600;
-      
-      const grad = ctx.createLinearGradient(x, SCREEN_HEIGHT / 2 - 200, x, SCREEN_HEIGHT / 2);
-      grad.addColorStop(0, '#334155');
-      grad.addColorStop(1, '#1e293b');
-      ctx.fillStyle = grad;
-      
+  const drawCoastalSunset = (ctx: CanvasRenderingContext2D, position: number) => {
+    const offset = (position / 150) % 1000;
+    // Sun
+    ctx.fillStyle = BIOMES.COASTAL_HIGHWAY.palette.neon;
+    ctx.beginPath();
+    ctx.arc(SCREEN_WIDTH * 0.7, SCREEN_HEIGHT / 2 - 50, 80, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Waves
+    ctx.fillStyle = BIOMES.COASTAL_HIGHWAY.palette.env[2];
+    for (let i = 0; i < 10; i++) {
+      const x = (i * 300 - offset + 3000) % 3000 - 500;
       ctx.beginPath();
       ctx.moveTo(x, SCREEN_HEIGHT / 2);
-      ctx.lineTo(x + 200, SCREEN_HEIGHT / 2 - 200);
-      ctx.lineTo(x + 400, SCREEN_HEIGHT / 2);
+      ctx.quadraticCurveTo(x + 150, SCREEN_HEIGHT / 2 + 20, x + 300, SCREEN_HEIGHT / 2);
       ctx.fill();
+    }
+  };
+
+  const drawIndustrialZone = (ctx: CanvasRenderingContext2D, position: number) => {
+    const offset = (position / 120) % 1000;
+    ctx.fillStyle = BIOMES.CYBER_INDUSTRIAL.palette.shadow;
+    for (let i = 0; i < 15; i++) {
+      const h = 150 + Math.random() * 100;
+      const x = (i * 150 - offset + 3000) % 3000 - 500;
       
-      // Snow cap
-      ctx.fillStyle = '#f8fafc';
+      // Factory Silhouette
+      ctx.fillRect(x, SCREEN_HEIGHT / 2 - h, 100, h);
+      // Chimney
+      ctx.fillRect(x + 70, SCREEN_HEIGHT / 2 - h - 40, 20, 40);
+      // Red warning light
+      ctx.fillStyle = '#ef4444';
       ctx.beginPath();
-      ctx.moveTo(x + 150, SCREEN_HEIGHT / 2 - 150);
-      ctx.lineTo(x + 200, SCREEN_HEIGHT / 2 - 200);
-      ctx.lineTo(x + 250, SCREEN_HEIGHT / 2 - 150);
+      ctx.arc(x + 80, SCREEN_HEIGHT / 2 - h - 45, 3, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = BIOMES.CYBER_INDUSTRIAL.palette.shadow;
     }
   };
 

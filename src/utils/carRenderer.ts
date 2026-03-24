@@ -183,10 +183,18 @@ const drawMainBody = (ctx: CanvasRenderingContext2D, x: number, y: number, w: nu
   ctx.lineTo(x, y - h * 0.3);
   ctx.stroke();
 
-  // Rim Highlight (Stylized PBR)
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  // 939PRO Neon Trim Lines
+  ctx.strokeStyle = shadeColor(config.color, 50);
   ctx.lineWidth = 2;
+  ctx.shadowBlur = 10;
+  ctx.shadowColor = ctx.strokeStyle;
+  ctx.beginPath();
+  ctx.moveTo(x - w * 0.4, y - h * 0.1);
+  ctx.lineTo(x - w * 0.4, y - h * 0.4);
+  ctx.moveTo(x + w * 0.4, y - h * 0.1);
+  ctx.lineTo(x + w * 0.4, y - h * 0.4);
   ctx.stroke();
+  ctx.shadowBlur = 0;
 };
 
 const drawCabin = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig) => {
@@ -407,6 +415,35 @@ const drawLicensePlate = (ctx: CanvasRenderingContext2D, x: number, y: number, h
   ctx.fillText(text, x, y - h * 0.28 + 12);
 };
 
+const drawBoostFlames = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+  ctx.save();
+  const time = Date.now() / 50;
+  const flameW = w * 0.15;
+  const flameH = h * 0.8;
+  
+  const drawFlame = (fx: number, fy: number) => {
+    const grad = ctx.createLinearGradient(fx, fy, fx, fy + flameH);
+    grad.addColorStop(0, '#fff');
+    grad.addColorStop(0.2, '#00ffff');
+    grad.addColorStop(0.5, '#0066ff');
+    grad.addColorStop(1, 'transparent');
+    
+    ctx.fillStyle = grad;
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = '#00ffff';
+    
+    ctx.beginPath();
+    ctx.moveTo(fx - flameW/2, fy);
+    ctx.lineTo(fx + flameW/2, fy);
+    ctx.lineTo(fx + (Math.sin(time) * 5), fy + flameH + (Math.cos(time) * 10));
+    ctx.fill();
+  };
+
+  drawFlame(x - w * 0.25, y - 5);
+  drawFlame(x + w * 0.25, y - 5);
+  ctx.restore();
+};
+
 export const drawCar = (
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -416,9 +453,14 @@ export const drawCar = (
   config: CarConfig,
   isBraking: boolean = false,
   damage: number = 0,
-  driftAngle: number = 0
+  driftAngle: number = 0,
+  isBoosting: boolean = false
 ) => {
   ctx.save();
+  
+  if (isBoosting) {
+    drawBoostFlames(ctx, x, y, w, h);
+  }
   
   if (driftAngle !== 0) {
     ctx.translate(x, y - h/2);
