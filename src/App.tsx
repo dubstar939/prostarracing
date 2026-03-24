@@ -379,7 +379,7 @@ export default function App() {
                   <Map className="w-4 h-4" /> Track Theme
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
-                  {(['neon_city', 'coastal_highway', 'desert_canyon', 'cyber_industrial'] as TrackThemeType[]).map((t) => (
+                  {(['neon_city', 'coastal_highway', 'desert_canyon', 'cyber_industrial', 'mountain_pass', 'urban_downtown'] as TrackThemeType[]).map((t) => (
                     <button
                       key={t}
                       onClick={() => setTrackTheme(t)}

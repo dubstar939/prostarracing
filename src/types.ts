@@ -1,6 +1,6 @@
 export type CarModelType = 'speedster' | 'drifter' | 'tank' | 'interceptor';
 
-export type BiomeType = 'neon_city' | 'coastal_highway' | 'desert_canyon' | 'cyber_industrial';
+export type BiomeType = 'neon_city' | 'coastal_highway' | 'desert_canyon' | 'cyber_industrial' | 'mountain_pass' | 'urban_downtown';
 
 export interface CarConfig {
   model: CarModelType;

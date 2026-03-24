@@ -10,7 +10,7 @@ import { CarConfig, RaceMode, PERFORMANCE_PARTS, CarModelType } from '../types';
 
 import { BIOMES, TRACK_TILESET } from '../constants/assets';
 
-export type TrackThemeType = 'neon_city' | 'coastal_highway' | 'desert_canyon' | 'cyber_industrial';
+export type TrackThemeType = 'neon_city' | 'coastal_highway' | 'desert_canyon' | 'cyber_industrial' | 'mountain_pass' | 'urban_downtown';
 
 interface RacingGameProps {
   level: number;
@@ -317,6 +317,24 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
           altRoad: shadeColor(BIOMES.CYBER_INDUSTRIAL.palette.road, 10), 
           altGrass: BIOMES.CYBER_INDUSTRIAL.palette.env[1], 
           altRumble: '#000' 
+        },
+        mountain_pass: { 
+          road: BIOMES.MOUNTAIN_PASS.palette.road, 
+          grass: BIOMES.MOUNTAIN_PASS.palette.env[0], 
+          rumble: BIOMES.MOUNTAIN_PASS.palette.neon, 
+          lane: BIOMES.MOUNTAIN_PASS.palette.highlight, 
+          altRoad: shadeColor(BIOMES.MOUNTAIN_PASS.palette.road, 10), 
+          altGrass: BIOMES.MOUNTAIN_PASS.palette.env[1], 
+          altRumble: '#000' 
+        },
+        urban_downtown: { 
+          road: BIOMES.URBAN_DOWNTOWN.palette.road, 
+          grass: BIOMES.URBAN_DOWNTOWN.palette.env[0], 
+          rumble: BIOMES.URBAN_DOWNTOWN.palette.neon, 
+          lane: BIOMES.URBAN_DOWNTOWN.palette.highlight, 
+          altRoad: shadeColor(BIOMES.URBAN_DOWNTOWN.palette.road, 10), 
+          altGrass: BIOMES.URBAN_DOWNTOWN.palette.env[1], 
+          altRumble: '#000' 
         }
       }[trackTheme];
 
@@ -384,6 +402,18 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
           addStraight(80);
           addSCurves();
         }
+      } else if (trackTheme === 'mountain_pass') {
+        // Mountain Pass: Extreme elevation, sharp curves
+        for (let i = 0; i < 12; i++) {
+          addHill(50, 50, 50, (random() - 0.5) * 200);
+          addCurve(40, 40, 40, (random() > 0.5 ? 1 : -1) * 6, 0);
+        }
+      } else if (trackTheme === 'urban_downtown') {
+        // Urban Downtown: Grid-like, many straights and 90 degree turns
+        for (let i = 0; i < 15; i++) {
+          addStraight(100);
+          addCurve(20, 20, 20, (random() > 0.5 ? 1 : -1) * 8, 0);
+        }
       }
 
       // Ending straight
@@ -410,6 +440,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
             source = random() > 0.7 ? 'rock' : 'cactus';
           } else if (trackTheme === 'cyber_industrial') {
             source = random() > 0.5 ? 'building' : 'lamp'; // Industrial buildings/lamps
+          } else if (trackTheme === 'mountain_pass') {
+            source = random() > 0.6 ? 'rock' : 'pine';
+          } else if (trackTheme === 'urban_downtown') {
+            source = random() > 0.4 ? 'building' : 'lamp';
           }
 
           segments[n].sprites.push({ 
@@ -986,6 +1020,12 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       } else if (trackTheme === 'desert_canyon') {
         skyGrad.addColorStop(0, BIOMES.DESERT_CANYON.palette.env[1]);
         skyGrad.addColorStop(1, BIOMES.DESERT_CANYON.palette.env[2]);
+      } else if (trackTheme === 'mountain_pass') {
+        skyGrad.addColorStop(0, BIOMES.MOUNTAIN_PASS.palette.env[1]);
+        skyGrad.addColorStop(1, BIOMES.MOUNTAIN_PASS.palette.env[2]);
+      } else if (trackTheme === 'urban_downtown') {
+        skyGrad.addColorStop(0, BIOMES.URBAN_DOWNTOWN.palette.shadow);
+        skyGrad.addColorStop(1, BIOMES.URBAN_DOWNTOWN.palette.env[1]);
       } else {
         skyGrad.addColorStop(0, BIOMES.CYBER_INDUSTRIAL.palette.shadow);
         skyGrad.addColorStop(1, BIOMES.CYBER_INDUSTRIAL.palette.env[2]);
@@ -1000,6 +1040,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         drawCoastalSunset(ctx, position);
       } else if (trackTheme === 'desert_canyon') {
         drawDunes(ctx, position); // Reuse dunes for canyon
+      } else if (trackTheme === 'mountain_pass') {
+        drawMountains(ctx, position);
+      } else if (trackTheme === 'urban_downtown') {
+        drawCityscape(ctx, position);
       } else {
         drawIndustrialZone(ctx, position);
       }
@@ -1554,6 +1598,32 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       ctx.beginPath();
       ctx.moveTo(x, SCREEN_HEIGHT / 2);
       ctx.quadraticCurveTo(x + 150, SCREEN_HEIGHT / 2 - 100, x + 300, SCREEN_HEIGHT / 2);
+      ctx.fill();
+    }
+  };
+
+  const drawMountains = (ctx: CanvasRenderingContext2D, position: number) => {
+    const offset = (position / 200) % 1000;
+    for (let i = 0; i < 8; i++) {
+      const x = (i * 400 - offset + 3200) % 3200 - 600;
+      
+      const grad = ctx.createLinearGradient(x, SCREEN_HEIGHT / 2 - 200, x, SCREEN_HEIGHT / 2);
+      grad.addColorStop(0, BIOMES.MOUNTAIN_PASS.palette.env[0]);
+      grad.addColorStop(1, BIOMES.MOUNTAIN_PASS.palette.shadow);
+      ctx.fillStyle = grad;
+      
+      ctx.beginPath();
+      ctx.moveTo(x, SCREEN_HEIGHT / 2);
+      ctx.lineTo(x + 200, SCREEN_HEIGHT / 2 - 200);
+      ctx.lineTo(x + 400, SCREEN_HEIGHT / 2);
+      ctx.fill();
+      
+      // Snow cap
+      ctx.fillStyle = BIOMES.MOUNTAIN_PASS.palette.neon;
+      ctx.beginPath();
+      ctx.moveTo(x + 150, SCREEN_HEIGHT / 2 - 150);
+      ctx.lineTo(x + 200, SCREEN_HEIGHT / 2 - 200);
+      ctx.lineTo(x + 250, SCREEN_HEIGHT / 2 - 150);
       ctx.fill();
     }
   };

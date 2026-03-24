@@ -110,6 +110,44 @@ export const BIOMES = {
       { layer: "near_machinery", elements: ["Rotating gears", "Crane arms"], speed: 0.7 }
     ],
     props: ["Shipping containers", "Pipes", "Industrial fans"]
+  },
+  MOUNTAIN_PASS: {
+    id: "mountain_pass",
+    name: "Mountain Pass",
+    mood: "Cool, Rocky, Pine-scented",
+    palette: {
+      road: "#334155",
+      neon: "#f8fafc", // White/Snow
+      shadow: "#1e293b",
+      highlight: "#94a3b8",
+      env: ["#475569", "#64748b", "#cbd5e0"],
+      fx: { boost: "#38bdf8", sparks: "#ffffff", drift: "#94a3b8" }
+    },
+    parallax: [
+      { layer: "far_peaks", elements: ["Snowy peaks", "Foggy valleys"], speed: 0.05 },
+      { layer: "mid_forest", elements: ["Pine trees", "Rock faces"], speed: 0.2 },
+      { layer: "near_cliffs", elements: ["Boulders", "Guardrails"], speed: 0.5 }
+    ],
+    props: ["Pine trees", "Boulders", "Snow patches"]
+  },
+  URBAN_DOWNTOWN: {
+    id: "urban_downtown",
+    name: "Urban Downtown",
+    mood: "Realistic, Reflective, Busy",
+    palette: {
+      road: "#1e293b",
+      neon: "#facc15", // Street lamp yellow
+      shadow: "#0f172a",
+      highlight: "#f8fafc",
+      env: ["#334155", "#475569", "#1e293b"],
+      fx: { boost: "#fbbf24", sparks: "#ffffff", drift: "#facc15" }
+    },
+    parallax: [
+      { layer: "far_skyline", elements: ["Distant skyscrapers", "City lights"], speed: 0.1 },
+      { layer: "mid_buildings", elements: ["Office blocks", "Billboards"], speed: 0.3 },
+      { layer: "near_street", elements: ["Street lamps", "Traffic signs"], speed: 0.6 }
+    ],
+    props: ["Street lamps", "Traffic signs", "Billboards"]
   }
 };
 
