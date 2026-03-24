@@ -12,14 +12,25 @@ import { GoogleGenAI } from '@google/genai';
 import { CarConfig, CAR_MODELS, CarModelType, RaceMode, Inventory } from './types';
 
 function useCoverImage() {
-  const [coverImage, setCoverImage] = useState<string | null>(localStorage.getItem('coverImage'));
+  const [coverImage, setCoverImage] = useState<string | null>(() => {
+    try {
+      return typeof localStorage !== 'undefined' ? localStorage.getItem('coverImage') : null;
+    } catch (e) {
+      return null;
+    }
+  });
 
   useEffect(() => {
     if (coverImage) return;
 
     const generateImage = async () => {
       try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+          console.warn("GEMINI_API_KEY is missing, skipping cover image generation");
+          return;
+        }
+        const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash-image',
           contents: '1980s arcade racing video game cover art, synthwave aesthetic, outrun style, neon grid floor, glowing sunset, retro sports car driving towards the horizon, vibrant magenta cyan and purple colors, airbrushed retro style, no text',
@@ -60,54 +71,92 @@ import Store from './components/Store';
 export default function App() {
   const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'lobby' | 'options' | 'mode-select' | 'garage' | 'store'>('title');
   const [level, setLevel] = useState(() => {
-    const saved = localStorage.getItem('racing_level');
-    return saved ? parseInt(saved, 10) : 1;
+    try {
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('racing_level') : null;
+      return saved ? parseInt(saved, 10) : 1;
+    } catch (e) {
+      return 1;
+    }
   });
   const [money, setMoney] = useState(() => {
-    const saved = localStorage.getItem('racing_money');
-    return saved ? parseInt(saved, 10) : 0;
+    try {
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('racing_money') : null;
+      return saved ? parseInt(saved, 10) : 0;
+    } catch (e) {
+      return 0;
+    }
   });
   const [carConfig, setCarConfig] = useState<CarConfig>(() => {
-    const saved = localStorage.getItem('racing_car_config');
-    return saved ? JSON.parse(saved) : {
-      model: 'speedster',
-      color: '#ffffff',
-      spoiler: 'small',
-      rims: 'silver',
-      decal: 'none',
-      bodyKit: 'stock',
-      engine: 1,
-      tires: 1,
-      turbo: 1
-    };
+    try {
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('racing_car_config') : null;
+      return saved ? JSON.parse(saved) : {
+        model: 'speedster',
+        color: '#ffffff',
+        spoiler: 'small',
+        rims: 'silver',
+        decal: 'none',
+        bodyKit: 'stock',
+        engine: 1,
+        tires: 1,
+        turbo: 1
+      };
+    } catch (e) {
+      return {
+        model: 'speedster',
+        color: '#ffffff',
+        spoiler: 'small',
+        rims: 'silver',
+        decal: 'none',
+        bodyKit: 'stock',
+        engine: 1,
+        tires: 1,
+        turbo: 1
+      };
+    }
   });
   
   const [inventory, setInventory] = useState<Inventory>(() => {
-    const saved = localStorage.getItem('racing_inventory');
-    return saved ? JSON.parse(saved) : {
-      engines: [1],
-      tires: [1],
-      turbos: [1]
-    };
+    try {
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('racing_inventory') : null;
+      return saved ? JSON.parse(saved) : {
+        engines: [1],
+        tires: [1],
+        turbos: [1]
+      };
+    } catch (e) {
+      return {
+        engines: [1],
+        tires: [1],
+        turbos: [1]
+      };
+    }
   });
   const [lastResult, setLastResult] = useState<{ position: number; time: string; reward: number; score?: number } | null>(null);
   const [raceMode, setRaceMode] = useState<RaceMode>('classic');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem('racing_level', level.toString());
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('racing_level', level.toString());
+    }
   }, [level]);
 
   useEffect(() => {
-    localStorage.setItem('racing_money', money.toString());
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('racing_money', money.toString());
+    }
   }, [money]);
 
   useEffect(() => {
-    localStorage.setItem('racing_car_config', JSON.stringify(carConfig));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('racing_car_config', JSON.stringify(carConfig));
+    }
   }, [carConfig]);
 
   useEffect(() => {
-    localStorage.setItem('racing_inventory', JSON.stringify(inventory));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('racing_inventory', JSON.stringify(inventory));
+    }
   }, [inventory]);
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [roomId, setRoomId] = useState('');
@@ -155,10 +204,12 @@ export default function App() {
   };
 
   const resetProgress = () => {
-    localStorage.removeItem('racing_level');
-    localStorage.removeItem('racing_car_config');
-    localStorage.removeItem('racing_money');
-    localStorage.removeItem('racing_inventory');
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('racing_level');
+      localStorage.removeItem('racing_car_config');
+      localStorage.removeItem('racing_money');
+      localStorage.removeItem('racing_inventory');
+    }
     setLevel(1);
     setMoney(0);
     setInventory({ engines: [1], tires: [1], turbos: [1] });
