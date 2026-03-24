@@ -166,7 +166,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         name: `CPU ${i + 1}`,
         offset: (i % 2 === 0 ? 0.5 : -0.5) + (Math.random() - 0.5) * 0.2,
         z: 2000 + i * 3000,
-        speed: 8000 + Math.random() * 2000,
+        speed: 6500 + (level * 250) + Math.random() * 1500,
         percent: 0,
         lap: 1,
         color: ['#ef4444', '#3b82f6', '#facc15', '#a855f7', '#ec4899', '#f97316', '#06b6d4', '#8b5cf6'][Math.floor(Math.random() * 8)],
@@ -744,7 +744,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         let curveAhead = Math.abs(lookAheadSegment.curve);
         
         // Target speed based on curve
-        const baseTargetSpeed = 9000 + (level * 300);
+        const baseTargetSpeed = 7500 + (level * 400);
         const curvePenalty = curveAhead * 5000;
         let targetSpeed = Math.max(5000, baseTargetSpeed - curvePenalty);
         
@@ -779,11 +779,12 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
               // Choose a side to pass
               const passSide = playerX > 0 ? -0.8 : 0.8;
               desiredOffset = playerX + passSide;
-              opp.speed += 1500 * dt; // Overtake boost
+              opp.speed += (500 + level * 100) * dt; // Overtake boost
             }
           } else { 
             // AI is ahead: Defensive blocking
-            if (Math.abs(opp.offset - playerX) < 1.0) {
+            const blockThreshold = Math.min(1.2, 0.3 + (level * 0.08));
+            if (Math.abs(opp.offset - playerX) < blockThreshold) {
               desiredOffset = playerX; // Mirror player to block
             }
           }
@@ -802,8 +803,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         });
 
         // Smoothly apply steering
+        const steerSpeed = 1.0 + (level * 0.1);
         const steerDiff = (desiredOffset - opp.offset);
-        opp.offset += steerDiff * 1.8 * dt;
+        opp.offset += steerDiff * steerSpeed * dt;
         opp.offset = Math.max(-1.4, Math.min(1.4, opp.offset));
         
         // Update visual angle for AI
@@ -816,7 +818,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         // Collision Detection
         if (Math.abs(zDiff) < 400 && Math.abs(opp.offset - playerX) < 0.3) {
           const impact = Math.abs(speed - opp.speed) / 1000;
-          damage = Math.min(100, damage + impact + 2);
+          const damageBase = 0.5 + (level * 0.2);
+          damage = Math.min(100, damage + impact + damageBase);
           audioManager.playCollision(impact / 10);
           screenShake = impact * 5;
 
@@ -841,8 +844,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         if (Math.abs(zDiff) < 3000) {
           if (zDiff > 0) { 
             // AI is ahead: Defensive driving
-            if (Math.abs(opp.offset - playerX) < 0.8) {
-              opp.offset += (playerX - opp.offset) * 1.5 * dt;
+            const mirrorThreshold = 0.3 + (level * 0.05);
+            if (Math.abs(opp.offset - playerX) < mirrorThreshold) {
+              opp.offset += (playerX - opp.offset) * (0.8 + level * 0.1) * dt;
             }
           } else { 
             // AI is behind: Aggressive overtaking
