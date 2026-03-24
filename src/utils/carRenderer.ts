@@ -28,23 +28,46 @@ const drawUnderglow = (ctx: CanvasRenderingContext2D, x: number, y: number, w: n
 };
 
 const drawTires = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig) => {
-  ctx.fillStyle = '#111';
-  let tireWidth = w * 0.2 + (config.tires * 2);
-  let tireHeight = h * 0.3;
-  let tireY = y - h * 0.2;
+  const tireWidth = (w * 0.2 + (config.tires * 2)) * (config.model === 'tank' ? 1.5 : (config.model === 'drifter' ? 1.2 : 1.1));
+  const tireHeight = h * 0.35;
+  const tireY = y - h * 0.15;
 
+  const drawWheel = (wx: number, wy: number) => {
+    // Tire
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.roundRect(wx - tireWidth / 2, wy - tireHeight / 2, tireWidth, tireHeight, 4);
+    ctx.fill();
+
+    // Rim
+    const rimSize = tireWidth * 0.7;
+    const rimGrad = ctx.createRadialGradient(wx, wy, 0, wx, wy, rimSize / 2);
+    rimGrad.addColorStop(0, '#d1d5db');
+    rimGrad.addColorStop(1, '#4b5563');
+    ctx.fillStyle = rimGrad;
+    ctx.beginPath();
+    ctx.arc(wx, wy, rimSize / 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Spokes
+    ctx.strokeStyle = '#1f2937';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 5; i++) {
+      const angle = (i * Math.PI * 2) / 5;
+      ctx.beginPath();
+      ctx.moveTo(wx, wy);
+      ctx.lineTo(wx + Math.cos(angle) * rimSize / 2.2, wy + Math.sin(angle) * rimSize / 2.2);
+      ctx.stroke();
+    }
+  };
+
+  drawWheel(x - w * 0.4, tireY);
+  drawWheel(x + w * 0.4, tireY);
+  
   if (config.model === 'tank') {
-    tireWidth *= 1.5;
-    tireHeight *= 1.3;
-    // Draw an extra set of wheels for the tank
-    ctx.fillRect(x - w / 2 - tireWidth / 2 + 5, tireY - tireHeight * 0.8, tireWidth, tireHeight);
-    ctx.fillRect(x + w / 2 - tireWidth / 2 - 5, tireY - tireHeight * 0.8, tireWidth, tireHeight);
-  } else if (config.model === 'drifter') {
-    tireWidth *= 1.3;
+    drawWheel(x - w * 0.4, tireY - tireHeight * 0.8);
+    drawWheel(x + w * 0.4, tireY - tireHeight * 0.8);
   }
-
-  ctx.fillRect(x - w / 2 - tireWidth / 2 + 5, tireY, tireWidth, tireHeight);
-  ctx.fillRect(x + w / 2 - tireWidth / 2 - 5, tireY, tireWidth, tireHeight);
 };
 
 const drawSpoiler = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig) => {
@@ -90,63 +113,108 @@ const drawSpoiler = (ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   }
 };
 
-const drawMainBody = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig) => {
+const drawMainBody = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig, damage: number, driftAngle: number) => {
+  // PBR-like Base Color with soft gradients
   const bodyGrad = ctx.createLinearGradient(x, y - h, x, y);
-  bodyGrad.addColorStop(0, config.color);
-  bodyGrad.addColorStop(1, shadeColor(config.color, -40));
+  bodyGrad.addColorStop(0, shadeColor(config.color, 10));
+  bodyGrad.addColorStop(0.4, config.color);
+  bodyGrad.addColorStop(1, shadeColor(config.color, -30));
   ctx.fillStyle = bodyGrad;
   
+  // 2.5D Side Panel for depth
+  const sideWidth = Math.abs(driftAngle) * 50;
+  if (sideWidth > 2) {
+    const sideGrad = ctx.createLinearGradient(x, y - h, x, y);
+    sideGrad.addColorStop(0, shadeColor(config.color, -20));
+    sideGrad.addColorStop(1, shadeColor(config.color, -60));
+    ctx.fillStyle = sideGrad;
+    ctx.beginPath();
+    const sideX = driftAngle > 0 ? x - w/2 : x + w/2;
+    const dir = driftAngle > 0 ? -1 : 1;
+    ctx.moveTo(sideX, y - h * 0.1);
+    ctx.lineTo(sideX + dir * sideWidth, y - h * 0.2);
+    ctx.lineTo(sideX + dir * sideWidth, y - h * 0.6);
+    ctx.lineTo(sideX, y - h * 0.5);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = bodyGrad;
   ctx.beginPath();
+  
+  const dent = (val: number) => {
+    if (damage < 25) return val;
+    return val + (Math.random() - 0.5) * (damage / 8);
+  };
+
+  // Simplified clean low-poly geometry
   if (config.model === 'speedster') {
-    ctx.moveTo(x - w / 2, y - h * 0.1);
-    ctx.bezierCurveTo(x - w / 2, y - h * 0.3, x - w * 0.45, y - h * 0.5, x - w * 0.45, y - h * 0.5);
-    ctx.lineTo(x + w * 0.45, y - h * 0.5);
-    ctx.bezierCurveTo(x + w * 0.45, y - h * 0.5, x + w / 2, y - h * 0.3, x + w / 2, y - h * 0.1);
+    ctx.moveTo(dent(x - w * 0.48), dent(y - h * 0.05));
+    ctx.lineTo(dent(x - w * 0.45), dent(y - h * 0.55));
+    ctx.lineTo(dent(x + w * 0.45), dent(y - h * 0.55));
+    ctx.lineTo(dent(x + w * 0.48), dent(y - h * 0.05));
   } else if (config.model === 'tank') {
-    ctx.moveTo(x - w * 0.55, y - h * 0.1);
-    ctx.lineTo(x - w * 0.55, y - h * 0.6);
-    ctx.lineTo(x + w * 0.55, y - h * 0.6);
-    ctx.lineTo(x + w * 0.55, y - h * 0.1);
+    ctx.moveTo(dent(x - w * 0.52), dent(y - h * 0.05));
+    ctx.lineTo(dent(x - w * 0.52), dent(y - h * 0.65));
+    ctx.lineTo(dent(x + w * 0.52), dent(y - h * 0.65));
+    ctx.lineTo(dent(x + w * 0.52), dent(y - h * 0.05));
   } else if (config.model === 'drifter') {
-    ctx.moveTo(x - w * 0.52, y - h * 0.1);
-    ctx.lineTo(x - w * 0.48, y - h * 0.55);
-    ctx.lineTo(x + w * 0.48, y - h * 0.55);
-    ctx.lineTo(x + w * 0.52, y - h * 0.1);
+    ctx.moveTo(dent(x - w * 0.5), dent(y - h * 0.05));
+    ctx.lineTo(dent(x - w * 0.42), dent(y - h * 0.58));
+    ctx.lineTo(dent(x + w * 0.42), dent(y - h * 0.58));
+    ctx.lineTo(dent(x + w * 0.5), dent(y - h * 0.05));
   } else {
-    ctx.moveTo(x - w / 2, y - h * 0.1);
-    ctx.bezierCurveTo(x - w / 2, y - h * 0.4, x - w * 0.48, y - h * 0.6, x - w * 0.48, y - h * 0.6);
-    ctx.lineTo(x + w * 0.48, y - h * 0.6);
-    ctx.bezierCurveTo(x + w * 0.48, y - h * 0.6, x + w / 2, y - h * 0.4, x + w / 2, y - h * 0.1);
+    ctx.moveTo(dent(x - w * 0.46), dent(y - h * 0.05));
+    ctx.lineTo(dent(x - w * 0.44), dent(y - h * 0.6));
+    ctx.lineTo(dent(x + w * 0.44), dent(y - h * 0.6));
+    ctx.lineTo(dent(x + w * 0.46), dent(y - h * 0.05));
   }
   ctx.closePath();
   ctx.fill();
+
+  // Panel Lines & Stylized Details
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  // Trunk line
+  ctx.moveTo(x - w * 0.35, y - h * 0.3);
+  ctx.lineTo(x + w * 0.35, y - h * 0.3);
+  // Vertical split
+  ctx.moveTo(x, y - h * 0.1);
+  ctx.lineTo(x, y - h * 0.3);
+  ctx.stroke();
+
+  // Rim Highlight (Stylized PBR)
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
 };
 
 const drawCabin = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig) => {
-  ctx.fillStyle = shadeColor(config.color, -15);
+  const cabinColor = shadeColor(config.color, -20);
+  ctx.fillStyle = cabinColor;
   ctx.beginPath();
   if (config.model === 'tank') {
-    ctx.moveTo(x - w * 0.45, y - h * 0.6);
-    ctx.lineTo(x - w * 0.4, y - h * 1.1);
-    ctx.lineTo(x + w * 0.4, y - h * 1.1);
-    ctx.lineTo(x + w * 0.45, y - h * 0.6);
+    ctx.moveTo(x - w * 0.42, y - h * 0.65);
+    ctx.lineTo(x - w * 0.38, y - h * 1.15);
+    ctx.lineTo(x + w * 0.38, y - h * 1.15);
+    ctx.lineTo(x + w * 0.42, y - h * 0.65);
   } else if (config.model === 'speedster') {
-    ctx.moveTo(x - w * 0.4, y - h * 0.5);
-    ctx.bezierCurveTo(x - w * 0.35, y - h * 0.75, x - w * 0.25, y - h * 0.9, x - w * 0.25, y - h * 0.9);
-    ctx.lineTo(x + w * 0.25, y - h * 0.9);
-    ctx.bezierCurveTo(x + w * 0.25, y - h * 0.9, x + w * 0.35, y - h * 0.75, x + w * 0.4, y - h * 0.5);
+    ctx.moveTo(x - w * 0.38, y - h * 0.55);
+    ctx.lineTo(x - w * 0.22, y - h * 0.95);
+    ctx.lineTo(x + w * 0.22, y - h * 0.95);
+    ctx.lineTo(x + w * 0.38, y - h * 0.55);
   } else {
-    ctx.moveTo(x - w * 0.42, y - h * 0.6);
-    ctx.bezierCurveTo(x - w * 0.38, y - h * 0.85, x - w * 0.32, y - h, x - w * 0.32, y - h);
-    ctx.lineTo(x + w * 0.32, y - h);
-    ctx.bezierCurveTo(x + w * 0.32, y - h, x + w * 0.38, y - h * 0.85, x + w * 0.42, y - h * 0.6);
+    ctx.moveTo(x - w * 0.4, y - h * 0.6);
+    ctx.lineTo(x - w * 0.3, y - h * 1.05);
+    ctx.lineTo(x + w * 0.3, y - h * 1.05);
+    ctx.lineTo(x + w * 0.4, y - h * 0.6);
   }
   ctx.closePath();
   ctx.fill();
 
-  // Roof Highlight
-  const roofGrad = ctx.createLinearGradient(x, y - h, x, y - h + 10);
-  roofGrad.addColorStop(0, 'rgba(255,255,255,0.3)');
+  // Roof Highlight (Soft PBR Gradient)
+  const roofGrad = ctx.createLinearGradient(x, y - h * 1.1, x, y - h * 0.6);
+  roofGrad.addColorStop(0, 'rgba(255,255,255,0.25)');
   roofGrad.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = roofGrad;
   ctx.fill();
@@ -192,26 +260,26 @@ const drawDecals = (ctx: CanvasRenderingContext2D, x: number, y: number, w: numb
 };
 
 const drawWindows = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, damage: number) => {
-  const winGrad = ctx.createLinearGradient(x, y - h + 15, x, y - h + 15 + h / 2.5);
+  const winGrad = ctx.createLinearGradient(x, y - h * 1.0, x, y - h * 0.6);
   winGrad.addColorStop(0, '#1e293b');
-  winGrad.addColorStop(0.5, '#334155');
+  winGrad.addColorStop(0.6, '#334155');
   winGrad.addColorStop(1, '#0f172a');
   ctx.fillStyle = winGrad;
   ctx.beginPath();
-  ctx.moveTo(x - w * 0.28, y - h + 12);
-  ctx.lineTo(x + w * 0.28, y - h + 12);
-  ctx.lineTo(x + w * 0.38, y - h * 0.6 - 8);
-  ctx.lineTo(x - w * 0.38, y - h * 0.6 - 8);
+  ctx.moveTo(x - w * 0.28, y - h * 1.0);
+  ctx.lineTo(x + w * 0.28, y - h * 1.0);
+  ctx.lineTo(x + w * 0.38, y - h * 0.65);
+  ctx.lineTo(x - w * 0.38, y - h * 0.65);
   ctx.closePath();
   ctx.fill();
 
-  // Window Reflection
-  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  // Glass Reflection (Stylized)
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
   ctx.beginPath();
-  ctx.moveTo(x - w * 0.28, y - h + 12);
-  ctx.lineTo(x, y - h + 12);
-  ctx.lineTo(x + w * 0.1, y - h * 0.6 - 8);
-  ctx.lineTo(x - w * 0.38, y - h * 0.6 - 8);
+  ctx.moveTo(x - w * 0.25, y - h * 0.98);
+  ctx.lineTo(x - w * 0.05, y - h * 0.98);
+  ctx.lineTo(x + w * 0.05, y - h * 0.68);
+  ctx.lineTo(x - w * 0.35, y - h * 0.68);
   ctx.fill();
 
   // Damage Cracks
@@ -234,32 +302,49 @@ const drawWindows = (ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   }
 };
 
-const drawTailLights = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig, isBraking: boolean) => {
-  ctx.fillStyle = isBraking ? '#ff0000' : '#880000';
-  ctx.shadowBlur = isBraking ? 45 : 15;
-  ctx.shadowColor = '#ff0000';
-  
-  if (config.bodyKit === 'extreme') {
-    ctx.fillRect(x - w * 0.45, y - h * 0.48, w * 0.9, h * 0.05);
-  } else {
+const drawTailLights = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig, isBraking: boolean, damage: number) => {
+  const leftLightOut = damage > 50 && Math.random() > 0.95; // Flickering or out
+  const rightLightOut = damage > 70 && Math.random() > 0.98;
+  const bothOut = damage > 90;
+
+  const drawLight = (lx: number, ly: number, lw: number, lh: number, isOut: boolean) => {
+    if (isOut || bothOut) {
+      ctx.fillStyle = '#220000';
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.fillStyle = isBraking ? '#ff0000' : '#880000';
+      ctx.shadowBlur = isBraking ? 45 : 15;
+      ctx.shadowColor = '#ff0000';
+    }
     ctx.beginPath();
-    ctx.roundRect(x - w * 0.44, y - h * 0.52, w / 4, h / 10, 3);
-    ctx.roundRect(x + w * 0.44 - w / 4, y - h * 0.52, w / 4, h / 10, 3);
+    ctx.roundRect(lx, ly, lw, lh, 3);
     ctx.fill();
+  };
+
+  if (config.bodyKit === 'extreme') {
+    ctx.fillStyle = isBraking ? '#ff0000' : '#880000';
+    ctx.shadowBlur = isBraking ? 45 : 15;
+    ctx.shadowColor = '#ff0000';
+    if (damage > 80) ctx.globalAlpha = 0.3;
+    ctx.fillRect(x - w * 0.45, y - h * 0.48, w * 0.9, h * 0.05);
+    ctx.globalAlpha = 1.0;
+  } else {
+    drawLight(x - w * 0.44, y - h * 0.52, w / 4, h / 10, leftLightOut);
+    drawLight(x + w * 0.44 - w / 4, y - h * 0.52, w / 4, h / 10, rightLightOut);
   }
   
   // Inner light glow
-  ctx.fillStyle = isBraking ? '#ffffff' : '#ffcccc';
-  ctx.shadowBlur = isBraking ? 25 : 10;
-  if (config.bodyKit !== 'extreme') {
-    ctx.beginPath();
-    ctx.roundRect(x - w * 0.38, y - h * 0.5 + 1, w / 15, h / 20, 1);
-    ctx.roundRect(x + w * 0.38 - w / 15, y - h * 0.5 + 1, w / 15, h / 20, 1);
-    ctx.fill();
+  if (!bothOut) {
+    ctx.fillStyle = isBraking ? '#ffffff' : '#ffcccc';
+    ctx.shadowBlur = isBraking ? 25 : 10;
+    if (config.bodyKit !== 'extreme') {
+      if (!leftLightOut) ctx.beginPath(), ctx.roundRect(x - w * 0.38, y - h * 0.5 + 1, w / 15, h / 20, 1), ctx.fill();
+      if (!rightLightOut) ctx.beginPath(), ctx.roundRect(x + w * 0.38 - w / 15, y - h * 0.5 + 1, w / 15, h / 20, 1), ctx.fill();
+    }
   }
   ctx.shadowBlur = 0;
 
-  if (isBraking) {
+  if (isBraking && damage < 95) {
     ctx.fillStyle = '#ff0000';
     ctx.shadowBlur = 15;
     ctx.shadowColor = '#ff0000';
@@ -354,7 +439,7 @@ export const drawCar = (
 
   drawTires(ctx, x, y, currentW, h, config);
   drawSpoiler(ctx, x, y, currentW, h, config);
-  drawMainBody(ctx, x, y, currentW, h, config);
+  drawMainBody(ctx, x, y, currentW, h, config, damage, driftAngle);
   
   // Cabin and Decals with clipping
   ctx.save();
@@ -366,9 +451,19 @@ export const drawCar = (
   ctx.restore();
 
   drawWindows(ctx, x, y, currentW, h, damage);
-  drawTailLights(ctx, x, y, currentW, h, config, isBraking);
+  drawTailLights(ctx, x, y, currentW, h, config, isBraking, damage);
   drawExhaust(ctx, x, y, currentW, config);
   drawLicensePlate(ctx, x, y, h, config.model);
+
+  // Damage Smoke Indicator
+  if (damage > 70) {
+    ctx.fillStyle = 'rgba(50, 50, 50, 0.4)';
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(x + (Math.random() - 0.5) * 40, y - h - 10 - Math.random() * 20, 10 + Math.random() * 10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 
   ctx.restore();
 };

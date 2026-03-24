@@ -62,9 +62,29 @@ export const PERFORMANCE_PARTS = {
   ]
 } as const;
 
-export const CAR_MODELS: Record<CarModelType, { name: string; description: string; stats: any }> = {
-  speedster: { name: 'Speedster', description: 'High top speed, lower handling.', stats: { speed: 8, accel: 6, handling: 4 } },
-  drifter: { name: 'Drifter', description: 'Perfect for sliding through corners.', stats: { speed: 6, accel: 7, handling: 8 } },
-  tank: { name: 'Tank', description: 'Heavy and stable, but slow acceleration.', stats: { speed: 5, accel: 4, handling: 9 } },
-  interceptor: { name: 'Interceptor', description: 'Balanced performance.', stats: { speed: 7, accel: 7, handling: 7 } },
+export const CAR_MODELS: Record<CarModelType, { name: string; description: string; stats: any; glbUrl?: string }> = {
+  speedster: { 
+    name: 'Speedster', 
+    description: 'High top speed, lower handling.', 
+    stats: { speed: 8, accel: 6, handling: 4 },
+    glbUrl: 'https://drive.google.com/uc?id=1ZO2tlfUPLfMTQjJdmb3_1eoKvcvuyd-c&export=download'
+  },
+  drifter: { 
+    name: 'Drifter', 
+    description: 'Perfect for sliding through corners.', 
+    stats: { speed: 6, accel: 7, handling: 8 },
+    glbUrl: 'https://drive.google.com/uc?id=1qsilNvPokP9RiwyxLsa3wM2Wn8-eRLIA&export=download'
+  },
+  tank: { 
+    name: 'Tank', 
+    description: 'Heavy and stable, but slow acceleration.', 
+    stats: { speed: 5, accel: 4, handling: 9 },
+    glbUrl: 'https://drive.google.com/uc?id=1MILzqchLBcokJYEZ4X9UJbfJvcALW8BD&export=download'
+  },
+  interceptor: { 
+    name: 'Interceptor', 
+    description: 'Balanced performance.', 
+    stats: { speed: 7, accel: 7, handling: 7 },
+    glbUrl: 'https://drive.google.com/uc?id=1ZO2tlfUPLfMTQjJdmb3_1eoKvcvuyd-c&export=download' // Reuse speedster for now
+  },
 };

@@ -199,17 +199,21 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
              nums[Math.floor(Math.random() * nums.length)];
     };
 
-    let opponents = Array.from({ length: 7 }, (_, i) => ({
-      name: `CPU ${i + 1}`,
-      offset: (i % 2 === 0 ? 0.5 : -0.5) + (Math.random() - 0.5) * 0.2,
-      z: 2000 + i * 3000,
-      speed: 8000 + Math.random() * 2000,
-      percent: 0,
-      lap: 1,
-      color: ['#ef4444', '#3b82f6', '#facc15', '#a855f7', '#ec4899', '#f97316', '#06b6d4', '#8b5cf6'][Math.floor(Math.random() * 8)],
-      plate: generatePlate(),
-      visualAngle: 0
-    }));
+    let opponents = Array.from({ length: 7 }, (_, i) => {
+      const models: CarModelType[] = ['speedster', 'drifter', 'tank', 'interceptor'];
+      return {
+        name: `CPU ${i + 1}`,
+        offset: (i % 2 === 0 ? 0.5 : -0.5) + (Math.random() - 0.5) * 0.2,
+        z: 2000 + i * 3000,
+        speed: 8000 + Math.random() * 2000,
+        percent: 0,
+        lap: 1,
+        color: ['#ef4444', '#3b82f6', '#facc15', '#a855f7', '#ec4899', '#f97316', '#06b6d4', '#8b5cf6'][Math.floor(Math.random() * 8)],
+        plate: generatePlate(),
+        visualAngle: 0,
+        model: models[Math.floor(Math.random() * models.length)]
+      };
+    });
 
     // Input
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -627,18 +631,24 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
 
       // Handling response: more sensitive at low speeds, stable at high speeds
       const handlingResponse = 4.5 * (1 - (speedPercent * 0.3));
+      // Damage impact on handling
+      const currentHandling = handlingResponse * (1 - (damage / 100) * 0.4);
 
-      if (keysRef.current['ArrowUp'] || keysRef.current['KeyW']) speed += accel * dt * grip * slipstreamBoost;
+      if (keysRef.current['ArrowUp'] || keysRef.current['KeyW']) {
+        // Damage impact on acceleration
+        const currentAccel = (turboActive ? TURBO_BOOST_ACCEL : accel) * (1 - (damage / 100) * 0.3);
+        speed += currentAccel * dt * grip * slipstreamBoost;
+      }
       else if (isBraking) speed += breaking * dt;
       else speed += decel * dt;
 
       speed *= driftSlowdown;
 
-      if (keysRef.current['ArrowLeft'] || keysRef.current['KeyA']) playerX -= dt * handlingResponse * driftFactor * speedPercent * grip;
-      if (keysRef.current['ArrowRight'] || keysRef.current['KeyD']) playerX += dt * handlingResponse * driftFactor * speedPercent * grip;
+      if (keysRef.current['ArrowLeft'] || keysRef.current['KeyA']) playerX -= dt * currentHandling * driftFactor * speedPercent * grip;
+      if (keysRef.current['ArrowRight'] || keysRef.current['KeyD']) playerX += dt * currentHandling * driftFactor * speedPercent * grip;
       
       if (useTilt && Math.abs(tiltRef.current) > 0.1) {
-        playerX += dt * handlingResponse * driftFactor * speedPercent * grip * tiltRef.current * 2.5;
+        playerX += dt * currentHandling * driftFactor * speedPercent * grip * tiltRef.current * 2.5;
       }
 
       // Off-road penalty
@@ -1037,9 +1047,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
             const oppW = (segment.p1.screen.w * (CAR_WIDTH / ROAD_WIDTH));
             const oppH = oppW * 0.6;
             
-            const models: CarModelType[] = ['speedster', 'drifter', 'tank', 'interceptor'];
             const oppConfig: CarConfig = {
-              model: models[idx % models.length],
+              model: opp.model as CarModelType,
               color: opp.color,
               spoiler: 'none',
               rims: 'silver',
@@ -1260,106 +1269,208 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
   };
 
   const drawTree = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    // Trunk with shading
+    // Low-poly Trunk
     const trunkGrad = ctx.createLinearGradient(x - w/10, y, x + w/10, y);
     trunkGrad.addColorStop(0, '#2d1b0f');
     trunkGrad.addColorStop(1, '#4d3b2f');
     ctx.fillStyle = trunkGrad;
-    ctx.fillRect(x - w / 10, y - h * 0.4, w / 5, h * 0.4);
+    ctx.beginPath();
+    ctx.moveTo(x - w/12, y);
+    ctx.lineTo(x - w/15, y - h * 0.4);
+    ctx.lineTo(x + w/15, y - h * 0.4);
+    ctx.lineTo(x + w/12, y);
+    ctx.fill();
 
-    // Detailed Foliage (Multiple layers for depth)
-    const drawFoliage = (fx: number, fy: number, fw: number, color: string) => {
-      ctx.fillStyle = color;
+    // Low-poly Foliage (Polygonal shapes for a stylized look)
+    const drawFoliagePart = (fx: number, fy: number, fw: number, fh: number, color: string) => {
+      const grad = ctx.createRadialGradient(fx, fy - fh/2, 0, fx, fy - fh/2, fw);
+      grad.addColorStop(0, shadeColor(color, 10));
+      grad.addColorStop(1, shadeColor(color, -20));
+      ctx.fillStyle = grad;
+      
       ctx.beginPath();
-      ctx.arc(fx, fy, fw, 0, Math.PI * 2);
-      ctx.fill();
-      // Highlight
-      ctx.fillStyle = 'rgba(255,255,255,0.1)';
-      ctx.beginPath();
-      ctx.arc(fx - fw/3, fy - fw/3, fw/2, 0, Math.PI * 2);
+      const sides = 6;
+      for (let i = 0; i < sides; i++) {
+        const angle = (i * Math.PI * 2) / sides;
+        const px = fx + Math.cos(angle) * fw;
+        const py = fy + Math.sin(angle) * fh;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
       ctx.fill();
     };
 
-    drawFoliage(x, y - h * 0.7, w * 0.8, '#166534');
-    drawFoliage(x - w * 0.4, y - h * 0.5, w * 0.6, '#15803d');
-    drawFoliage(x + w * 0.4, y - h * 0.5, w * 0.6, '#15803d');
-    drawFoliage(x, y - h * 0.9, w * 0.5, '#22c55e');
+    drawFoliagePart(x, y - h * 0.7, w * 0.7, h * 0.3, '#166534');
+    drawFoliagePart(x - w * 0.3, y - h * 0.5, w * 0.5, h * 0.25, '#15803d');
+    drawFoliagePart(x + w * 0.3, y - h * 0.5, w * 0.5, h * 0.25, '#15803d');
+    drawFoliagePart(x, y - h * 0.85, w * 0.4, h * 0.2, '#22c55e');
   };
 
   const drawPine = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+    // Trunk
     ctx.fillStyle = '#2d1b0f';
-    ctx.fillRect(x - w / 10, y - h * 0.2, w / 5, h * 0.2);
-    ctx.fillStyle = '#064e3b';
+    ctx.beginPath();
+    ctx.moveTo(x - w/15, y);
+    ctx.lineTo(x - w/20, y - h * 0.2);
+    ctx.lineTo(x + w/20, y - h * 0.2);
+    ctx.lineTo(x + w/15, y);
+    ctx.fill();
+
+    // Low-poly Pine Layers
+    const colors = ['#064e3b', '#065f46', '#047857'];
     for (let i = 0; i < 3; i++) {
+      const grad = ctx.createLinearGradient(x - w/2, y - h * 0.2 - i * h * 0.2, x + w/2, y - h * 0.2 - i * h * 0.2);
+      grad.addColorStop(0, colors[i]);
+      grad.addColorStop(1, shadeColor(colors[i], -20));
+      ctx.fillStyle = grad;
+      
       ctx.beginPath();
-      ctx.moveTo(x - w / 2 * (1 - i * 0.2), y - h * 0.2 - i * h * 0.2);
-      ctx.lineTo(x + w / 2 * (1 - i * 0.2), y - h * 0.2 - i * h * 0.2);
-      ctx.lineTo(x, y - h * 0.5 - i * h * 0.2);
+      const layerW = w * 0.5 * (1 - i * 0.2);
+      ctx.moveTo(x - layerW, y - h * 0.2 - i * h * 0.2);
+      ctx.lineTo(x + layerW, y - h * 0.2 - i * h * 0.2);
+      ctx.lineTo(x, y - h * 0.55 - i * h * 0.2);
       ctx.fill();
     }
   };
 
   const drawCactus = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    ctx.fillStyle = '#166534';
-    ctx.fillRect(x - w / 6, y - h, w / 3, h);
-    ctx.fillRect(x - w / 2, y - h * 0.7, w / 2, w / 4);
-    ctx.fillRect(x - w / 2, y - h * 0.9, w / 6, h * 0.2);
-    ctx.fillRect(x + w / 6, y - h * 0.5, w / 2, w / 4);
-    ctx.fillRect(x + w / 2, y - h * 0.7, w / 6, h * 0.2);
+    const grad = ctx.createLinearGradient(x - w/2, y, x + w/2, y);
+    grad.addColorStop(0, '#166534');
+    grad.addColorStop(1, '#064e3b');
+    ctx.fillStyle = grad;
+
+    // Main body (Blocky low-poly)
+    ctx.beginPath();
+    ctx.roundRect(x - w / 8, y - h, w / 4, h, 4);
+    ctx.fill();
+
+    // Arms
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2, y - h * 0.7, w / 2, h * 0.1, 2); // Left arm base
+    ctx.roundRect(x - w / 2, y - h * 0.9, w / 8, h * 0.3, 2); // Left arm vertical
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.roundRect(x + w / 8, y - h * 0.5, w / 2, h * 0.1, 2); // Right arm base
+    ctx.roundRect(x + w / 2 - w / 8, y - h * 0.7, w / 8, h * 0.3, 2); // Right arm vertical
+    ctx.fill();
   };
 
   const drawBuilding = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    ctx.fillStyle = '#1e293b';
+    // Main Structure
+    const bGrad = ctx.createLinearGradient(x - w/2, y - h, x + w/2, y);
+    bGrad.addColorStop(0, '#1e293b');
+    bGrad.addColorStop(1, '#0f172a');
+    ctx.fillStyle = bGrad;
     ctx.fillRect(x - w / 2, y - h, w, h);
-    ctx.fillStyle = '#334155';
+
+    // Stylized Windows
+    const winW = w / 6;
+    const winH = h / 10;
+    const spacingX = w / 4;
+    const spacingY = h / 7;
+
     for (let row = 0; row < 5; row++) {
       for (let col = 0; col < 3; col++) {
-        if (Math.random() > 0.3) {
-          ctx.fillStyle = Math.random() > 0.8 ? '#fef08a' : '#334155';
-          ctx.fillRect(x - w / 2 + 10 + col * (w / 4), y - h + 10 + row * (h / 6), w / 6, h / 10);
+        const wx = x - w / 2 + 12 + col * spacingX;
+        const wy = y - h + 12 + row * spacingY;
+        
+        const isLit = Math.random() > 0.7;
+        ctx.fillStyle = isLit ? '#fef08a' : '#334155';
+        if (isLit) {
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#fef08a';
         }
+        ctx.fillRect(wx, wy, winW, winH);
+        ctx.shadowBlur = 0;
       }
     }
+
+    // Roof Detail
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(x - w/2 - 5, y - h - 10, w + 10, 10);
   };
 
   const drawLamp = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    ctx.fillStyle = '#475569';
+    // Pole
+    const poleGrad = ctx.createLinearGradient(x - 2, y, x + 2, y);
+    poleGrad.addColorStop(0, '#475569');
+    poleGrad.addColorStop(1, '#1e293b');
+    ctx.fillStyle = poleGrad;
     ctx.fillRect(x - 2, y - h, 4, h);
-    ctx.fillStyle = '#fef08a';
+
+    // Lamp Head
+    ctx.fillStyle = '#334155';
     ctx.beginPath();
-    ctx.arc(x, y - h, 10, 0, Math.PI * 2);
+    ctx.moveTo(x - 15, y - h);
+    ctx.lineTo(x + 15, y - h);
+    ctx.lineTo(x + 10, y - h - 8);
+    ctx.lineTo(x - 10, y - h - 8);
     ctx.fill();
-    ctx.shadowBlur = 15;
+
+    // Light
+    ctx.fillStyle = '#fef08a';
+    ctx.shadowBlur = 25;
     ctx.shadowColor = '#fef08a';
+    ctx.beginPath();
+    ctx.arc(x, y - h + 5, 8, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
   };
 
   const drawRock = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    ctx.fillStyle = '#4b5563';
+    const rGrad = ctx.createLinearGradient(x - w/2, y - h, x + w/2, y);
+    rGrad.addColorStop(0, '#64748b');
+    rGrad.addColorStop(1, '#334155');
+    ctx.fillStyle = rGrad;
+
+    // Sharp Low-poly Facets
     ctx.beginPath();
-    ctx.moveTo(x - w / 2, y);
-    ctx.lineTo(x - w / 3, y - h);
-    ctx.lineTo(x + w / 4, y - h * 0.8);
-    ctx.lineTo(x + w / 2, y);
+    ctx.moveTo(x - w * 0.5, y);
+    ctx.lineTo(x - w * 0.4, y - h * 0.8);
+    ctx.lineTo(x - w * 0.1, y - h);
+    ctx.lineTo(x + w * 0.3, y - h * 0.7);
+    ctx.lineTo(x + w * 0.5, y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Highlight Facet
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.beginPath();
+    ctx.moveTo(x - w * 0.4, y - h * 0.8);
+    ctx.lineTo(x - w * 0.1, y - h);
+    ctx.lineTo(x + w * 0.1, y - h * 0.5);
     ctx.fill();
   };
 
   const drawCityscape = (ctx: CanvasRenderingContext2D, position: number) => {
     const offset = (position / 100) % 1000;
-    ctx.fillStyle = '#0f172a';
     for (let i = 0; i < 20; i++) {
       const h = 100 + Math.sin(i * 1.5) * 50 + 100;
       const x = (i * 100 - offset + 2000) % 2000 - 500;
+      
+      const grad = ctx.createLinearGradient(x, SCREEN_HEIGHT / 2 - h, x, SCREEN_HEIGHT / 2);
+      grad.addColorStop(0, '#1e293b');
+      grad.addColorStop(1, '#0f172a');
+      ctx.fillStyle = grad;
       ctx.fillRect(x, SCREEN_HEIGHT / 2 - h, 80, h);
+      
+      // Top highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fillRect(x, SCREEN_HEIGHT / 2 - h, 80, 5);
     }
   };
 
   const drawDunes = (ctx: CanvasRenderingContext2D, position: number) => {
     const offset = (position / 150) % 1000;
-    ctx.fillStyle = '#d97706';
     for (let i = 0; i < 10; i++) {
       const x = (i * 300 - offset + 3000) % 3000 - 500;
+      const grad = ctx.createLinearGradient(x, SCREEN_HEIGHT / 2 - 100, x, SCREEN_HEIGHT / 2);
+      grad.addColorStop(0, '#f59e0b');
+      grad.addColorStop(1, '#d97706');
+      ctx.fillStyle = grad;
+      
       ctx.beginPath();
       ctx.moveTo(x, SCREEN_HEIGHT / 2);
       ctx.quadraticCurveTo(x + 150, SCREEN_HEIGHT / 2 - 100, x + 300, SCREEN_HEIGHT / 2);
@@ -1369,21 +1480,27 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
 
   const drawMountains = (ctx: CanvasRenderingContext2D, position: number) => {
     const offset = (position / 200) % 1000;
-    ctx.fillStyle = '#1e293b';
     for (let i = 0; i < 8; i++) {
       const x = (i * 400 - offset + 3200) % 3200 - 600;
+      
+      const grad = ctx.createLinearGradient(x, SCREEN_HEIGHT / 2 - 200, x, SCREEN_HEIGHT / 2);
+      grad.addColorStop(0, '#334155');
+      grad.addColorStop(1, '#1e293b');
+      ctx.fillStyle = grad;
+      
       ctx.beginPath();
       ctx.moveTo(x, SCREEN_HEIGHT / 2);
       ctx.lineTo(x + 200, SCREEN_HEIGHT / 2 - 200);
       ctx.lineTo(x + 400, SCREEN_HEIGHT / 2);
       ctx.fill();
+      
+      // Snow cap
       ctx.fillStyle = '#f8fafc';
       ctx.beginPath();
       ctx.moveTo(x + 150, SCREEN_HEIGHT / 2 - 150);
       ctx.lineTo(x + 200, SCREEN_HEIGHT / 2 - 200);
       ctx.lineTo(x + 250, SCREEN_HEIGHT / 2 - 150);
       ctx.fill();
-      ctx.fillStyle = '#1e293b';
     }
   };
 
