@@ -9,15 +9,34 @@ import { CarConfig, RaceMode, PERFORMANCE_PARTS, CarModelType } from '../types';
 
 import { BIOMES, TRACK_TILESET } from '../constants/assets';
 
-export type TrackThemeType = 'neon_city' | 'coastal_highway' | 'desert_canyon' | 'cyber_industrial' | 'mountain_pass' | 'urban_downtown';
+/**
+ * Represents the available track themes in the game.
+ */
+export type TrackThemeType = 
+  | 'neon_city' 
+  | 'coastal_highway' 
+  | 'desert_canyon' 
+  | 'cyber_industrial' 
+  | 'mountain_pass' 
+  | 'urban_downtown';
 
+/**
+ * Props for the RacingGame component.
+ */
 interface RacingGameProps {
+  /** The current difficulty level. */
   level: number;
+  /** The visual theme of the track. */
   trackTheme: TrackThemeType;
+  /** Current configuration of the player's car. */
   carConfig: CarConfig;
+  /** Function to update the car configuration. */
   setCarConfig: React.Dispatch<React.SetStateAction<CarConfig>>;
+  /** The game mode (e.g., career, quick race). */
   mode: RaceMode;
+  /** Callback triggered when the race finishes. */
   onRaceEnd: (position: number, time: number, score?: number) => void;
+  /** Callback to return to the previous menu. */
   onBack: () => void;
 }
 
@@ -30,25 +49,126 @@ const FIELD_OF_VIEW = 100;
 const CAMERA_HEIGHT = 1000;
 const CAMERA_DEPTH = 1 / Math.tan((FIELD_OF_VIEW / 2) * Math.PI / 180);
 const DRAW_DISTANCE = 300;
+const SCREEN_HEIGHT = 600;
 
-interface Segment {
-  index: number;
-  p1: { world: { x: number; y: number; z: number }; screen: { x: number; y: number; w: number } };
-  p2: { world: { x: number; y: number; z: number }; screen: { x: number; y: number; w: number } };
-  curve: number;
-  sprites: Sprite[];
-  color: { road: string; grass: string; rumble: string; lane?: string };
-  checkpoint?: boolean;
-  passed?: boolean;
+/**
+ * Represents a point in 3D space and its 2D projection.
+ */
+interface Point {
+  world: { x: number; y: number; z: number };
+  screen: { x: number; y: number; w: number };
 }
 
-interface Sprite {
+/**
+ * Represents a single segment of the pseudo-3D road.
+ */
+interface RoadSegment {
+  index: number;
+  p1: Point;
+  p2: Point;
+  curve: number;
+  sprites: ScenerySprite[];
+  colors: { 
+    road: string; 
+    grass: string; 
+    rumble: string; 
+    lane?: string;
+  };
+  isCheckpoint?: boolean;
+  hasPassed?: boolean;
+}
+
+/**
+ * Represents a decorative sprite (scenery) on the side of the road.
+ */
+interface ScenerySprite {
   source: string;
   offset: number;
   scale: number;
 }
 
-export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carConfig, setCarConfig, mode, onRaceEnd, onBack }) => {
+/**
+ * Represents an AI opponent in the race.
+ */
+interface Opponent {
+  name: string;
+  offset: number;
+  z: number;
+  speed: number;
+  percent: number;
+  lap: number;
+  color: string;
+  plate: string;
+  visualAngle: number;
+  model: CarModelType;
+}
+
+/**
+ * Easing function for smooth transitions.
+ * @param {number} a Start value.
+ * @param {number} b End value.
+ * @param {number} percent Progress percentage (0-1).
+ * @returns {number} Eased value.
+ */
+const easeIn = (a: number, b: number, percent: number): number => a + (b - a) * Math.pow(percent, 2);
+
+/**
+ * Easing function for smooth transitions with in-out effect.
+ * @param {number} a Start value.
+ * @param {number} b End value.
+ * @param {number} percent Progress percentage (0-1).
+ * @returns {number} Eased value.
+ */
+const easeInOut = (a: number, b: number, percent: number): number => a + (b - a) * ((-Math.cos(percent * Math.PI) / 2) + 0.5);
+
+/**
+ * Projects a 3D world point onto a 2D screen coordinate.
+ * @param {Point} p The point to project.
+ * @param {number} cameraX Camera X position.
+ * @param {number} cameraY Camera Y position.
+ * @param {number} cameraZ Camera Z position.
+ * @param {number} screenWidth Width of the screen.
+ * @param {number} screenHeight Height of the screen.
+ */
+const project = (
+  p: Point, 
+  cameraX: number, 
+  cameraY: number, 
+  cameraZ: number, 
+  screenWidth: number, 
+  screenHeight: number
+): void => {
+  const worldX = p.world.x - cameraX;
+  const worldY = p.world.y - cameraY;
+  const worldZ = p.world.z - cameraZ;
+  const scale = CAMERA_DEPTH / worldZ;
+  
+  p.screen.x = Math.round((screenWidth / 2) + (scale * worldX * screenWidth / 2));
+  p.screen.y = Math.round((screenHeight / 2) - (scale * worldY * screenHeight / 2));
+  p.screen.w = Math.round(scale * ROAD_WIDTH * screenWidth / 2);
+};
+
+/**
+ * Main Racing Game component.
+ * Implements a pseudo-3D racing engine with physics, AI, and rendering.
+ * 
+ * @example
+ * <RacingGame 
+ *   level={1} 
+ *   trackTheme="neon_city" 
+ *   carConfig={myCar} 
+ *   onRaceEnd={(pos, time) => console.log(pos, time)} 
+ * />
+ */
+export const RacingGame: React.FC<RacingGameProps> = ({ 
+  level, 
+  trackTheme, 
+  carConfig, 
+  setCarConfig, 
+  mode, 
+  onRaceEnd, 
+  onBack 
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -122,8 +242,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Track state
-    let segments: Segment[] = [];
+    // Track State
+    let segments: RoadSegment[] = [];
     let trackLength = 0;
     let playerX = 0;
     let position = 0;
@@ -133,10 +253,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     let lap = 1;
     let driftAngle = 0;
     const totalLaps = 2;
-    
-    const engineBoost = PERFORMANCE_PARTS.engine.find(p => p.level === carConfig.engine)?.boost || 0;
-    const turboAccel = PERFORMANCE_PARTS.turbo.find(p => p.level === carConfig.turbo)?.accel || 0;
-    const tireGrip = PERFORMANCE_PARTS.tires.find(p => p.level === carConfig.tires)?.grip || 0;
+
+    const engineBoost = PERFORMANCE_PARTS.engine.find((p) => p.level === carConfig.engine)?.boost || 0;
+    const turboAccel = PERFORMANCE_PARTS.turbo.find((p) => p.level === carConfig.turbo)?.accel || 0;
+    const tireGrip = PERFORMANCE_PARTS.tires.find((p) => p.level === carConfig.tires)?.grip || 0;
 
     const baseMaxSpeed = 15000;
     const maxSpeed = baseMaxSpeed + (engineBoost * 150);
@@ -147,20 +267,20 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     const offRoadDecel = -maxSpeed / 1.5;
     const offRoadLimit = maxSpeed / 3;
 
-    // Opponents
-    const generatePlate = () => {
+    /**
+     * Generates a random license plate string.
+     * @returns {string} A plate in the format XXX-000.
+     */
+    const generatePlate = (): string => {
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       const nums = '0123456789';
-      return chars[Math.floor(Math.random() * chars.length)] + 
-             chars[Math.floor(Math.random() * chars.length)] + 
-             chars[Math.floor(Math.random() * chars.length)] + 
-             '-' + 
-             nums[Math.floor(Math.random() * nums.length)] + 
-             nums[Math.floor(Math.random() * nums.length)] + 
-             nums[Math.floor(Math.random() * nums.length)];
+      const randomChar = () => chars[Math.floor(Math.random() * chars.length)];
+      const randomNum = () => nums[Math.floor(Math.random() * nums.length)];
+      
+      return `${randomChar()}${randomChar()}${randomChar()}-${randomNum()}${randomNum()}${randomNum()}`;
     };
 
-    let opponents = Array.from({ length: 7 }, (_, i) => {
+    const opponents: Opponent[] = Array.from({ length: 7 }, (_, i) => {
       const models: CarModelType[] = ['speedster', 'drifter', 'tank', 'interceptor'];
       return {
         name: `CPU ${i + 1}`,
@@ -176,56 +296,46 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       };
     });
 
-    // Input
-    const handleKeyDown = (e: KeyboardEvent) => {
-      keysRef.current[e.code] = true;
-      if (e.code === 'Escape' || e.code === 'KeyP') {
-        togglePause();
-      }
-    };
-    const handleKeyUp = (e: KeyboardEvent) => keysRef.current[e.code] = false;
-    
-    const handleOrientation = (e: DeviceOrientationEvent) => {
-      if (!useTilt) return;
-      // gamma is the left-to-right tilt in degrees, where right is positive
-      let tilt = e.gamma || 0;
-      // Clamp tilt to -30 to 30 degrees and normalize to -1 to 1
-      tilt = Math.max(-30, Math.min(30, tilt)) / 30;
-      tiltRef.current = tilt;
-    };
+    const findSegment = (z: number): RoadSegment => segments[Math.floor(z / SEGMENT_LENGTH) % segments.length];
+    const getLastY = (): number => (segments.length > 0 ? segments[segments.length - 1].p2.world.y : 0);
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('deviceorientation', handleOrientation);
-
-    // Track Generation
-    const addSegment = (curve: number, y: number) => {
+    const addSegment = (curve: number, y: number, colors: RoadSegment['colors']) => {
       const n = segments.length;
       segments.push({
         index: n,
-        p1: { world: { x: 0, y: lastY(), z: n * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
-        p2: { world: { x: 0, y: y, z: (n + 1) * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
+        p1: { 
+          world: { x: 0, y: getLastY(), z: n * SEGMENT_LENGTH }, 
+          screen: { x: 0, y: 0, w: 0 } 
+        },
+        p2: { 
+          world: { x: 0, y: y, z: (n + 1) * SEGMENT_LENGTH }, 
+          screen: { x: 0, y: 0, w: 0 } 
+        },
         curve: curve,
         sprites: [],
-        color: Math.floor(n / RUMBLE_LENGTH) % 2 ? 
-          { road: '#333', grass: '#10b981', rumble: '#fff', lane: '#fff' } : 
-          { road: '#3a3a3a', grass: '#059669', rumble: '#000' }
+        colors: colors
       });
     };
 
-    const lastY = () => (segments.length > 0 ? segments[segments.length - 1].p2.world.y : 0);
-
-    const addRoad = (enter: number, hold: number, leave: number, curve: number, y: number) => {
-      const startY = lastY();
+    const addRoad = (enter: number, hold: number, leave: number, curve: number, y: number, themeColors: any) => {
+      const startY = getLastY();
       const endY = startY + (y * SEGMENT_LENGTH);
       const total = enter + hold + leave;
-      for (let n = 0; n < enter; n++) addSegment(easeIn(0, curve, n / enter), easeInOut(startY, endY, n / total));
-      for (let n = 0; n < hold; n++) addSegment(curve, easeInOut(startY, endY, (enter + n) / total));
-      for (let n = 0; n < leave; n++) addSegment(easeInOut(curve, 0, n / leave), easeInOut(startY, endY, (enter + hold + n) / total));
+      
+      for (let n = 0; n < total; n++) {
+        const curveVal = n < enter ? easeIn(0, curve, n / enter) : 
+                        n < enter + hold ? curve : 
+                        easeInOut(curve, 0, (n - enter - hold) / leave);
+        
+        const yVal = easeInOut(startY, endY, n / total);
+        const isAlt = Math.floor(segments.length / RUMBLE_LENGTH) % 2;
+        const colors = isAlt ? 
+          { road: themeColors.road, grass: themeColors.grass, rumble: themeColors.rumble, lane: themeColors.lane } : 
+          { road: themeColors.altRoad, grass: themeColors.altGrass, rumble: themeColors.altRumble };
+          
+        addSegment(curveVal, yVal, colors);
+      }
     };
-
-    const easeIn = (a: number, b: number, percent: number) => a + (b - a) * Math.pow(percent, 2);
-    const easeInOut = (a: number, b: number, percent: number) => a + (b - a) * ((-Math.cos(percent * Math.PI) / 2) + 0.5);
 
     const resetTrack = () => {
       segments = [];
@@ -234,7 +344,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       
       // Simple seeded random for consistent tracks per level
       let seed = level * 12345;
-      const random = () => {
+      const seededRandom = () => {
         seed = (seed * 9301 + 49297) % 233280;
         return seed / 233280;
       };
@@ -297,40 +407,25 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         }
       }[trackTheme];
 
-      const addSegment = (curve: number, y: number) => {
-        const n = segments.length;
-        const isAlt = Math.floor(n / RUMBLE_LENGTH) % 2;
-        segments.push({
-          index: n,
-          p1: { world: { x: 0, y: lastY(), z: n * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
-          p2: { world: { x: 0, y: y, z: (n + 1) * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
-          curve: curve,
-          sprites: [],
-          color: isAlt ? 
-            { road: themeColors.road, grass: themeColors.grass, rumble: themeColors.rumble, lane: themeColors.lane } : 
-            { road: themeColors.altRoad, grass: themeColors.altGrass, rumble: themeColors.altRumble }
-        });
-      };
-
-      const addStraight = (length: number) => addRoad(length, length, length, 0, 0);
-      const addCurve = (enter: number, hold: number, leave: number, curve: number, hill: number) => addRoad(enter, hold, leave, curve, hill);
-      const addHill = (enter: number, hold: number, leave: number, hill: number) => addRoad(enter, hold, leave, 0, hill);
+      const addStraight = (length: number) => addRoad(length, length, length, 0, 0, themeColors);
+      const addCurve = (enter: number, hold: number, leave: number, curve: number, hill: number) => addRoad(enter, hold, leave, curve, hill, themeColors);
+      const addHill = (enter: number, hold: number, leave: number, hill: number) => addRoad(enter, hold, leave, 0, hill, themeColors);
       
       const addBumps = () => {
-        const numBumps = 4 + Math.floor(random() * 6);
+        const numBumps = 4 + Math.floor(seededRandom() * 6);
         for (let i = 0; i < numBumps; i++) {
-          addRoad(10, 10, 10, 0, 5);
-          addRoad(10, 10, 10, 0, -5);
+          addRoad(10, 10, 10, 0, 5, themeColors);
+          addRoad(10, 10, 10, 0, -5, themeColors);
         }
       };
 
       const addSCurves = () => {
-        const dir = random() > 0.5 ? 1 : -1;
+        const dir = seededRandom() > 0.5 ? 1 : -1;
         const severity = 1 + level * 0.3;
-        addRoad(40, 40, 40, -2 * dir * severity, 15);
-        addRoad(40, 40, 40, 3 * dir * severity, -30);
-        addRoad(40, 40, 40, -4 * dir * severity, 15);
-        addRoad(40, 40, 40, 2 * dir * severity, 0);
+        addRoad(40, 40, 40, -2 * dir * severity, 15, themeColors);
+        addRoad(40, 40, 40, 3 * dir * severity, -30, themeColors);
+        addRoad(40, 40, 40, -4 * dir * severity, 15, themeColors);
+        addRoad(40, 40, 40, 2 * dir * severity, 0, themeColors);
       };
 
       // Starting straight
@@ -340,20 +435,20 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       if (trackTheme === 'neon_city') {
         // Neon City: Tight turns, many straights, high density
         for (let i = 0; i < 15; i++) {
-          addStraight(50 + random() * 100);
-          addCurve(20, 40, 20, (random() > 0.5 ? 1 : -1) * (4 + random() * 4), 0);
+          addStraight(50 + seededRandom() * 100);
+          addCurve(20, 40, 20, (seededRandom() > 0.5 ? 1 : -1) * (4 + seededRandom() * 4), 0);
         }
       } else if (trackTheme === 'coastal_highway') {
         // Coastal: Long sweeping curves, gentle hills
         for (let i = 0; i < 10; i++) {
-          addHill(100, 100, 100, (random() - 0.5) * 40);
-          addCurve(150, 200, 150, (random() - 0.5) * 3, 0);
+          addHill(100, 100, 100, (seededRandom() - 0.5) * 40);
+          addCurve(150, 200, 150, (seededRandom() - 0.5) * 3, 0);
         }
       } else if (trackTheme === 'desert_canyon') {
         // Desert Canyon: Massive hills, sharp drops
         for (let i = 0; i < 10; i++) {
-          addHill(100, 100, 100, (random() - 0.5) * 120);
-          addCurve(80, 80, 80, (random() - 0.5) * 5, 0);
+          addHill(100, 100, 100, (seededRandom() - 0.5) * 120);
+          addCurve(80, 80, 80, (seededRandom() - 0.5) * 5, 0);
         }
       } else if (trackTheme === 'cyber_industrial') {
         // Industrial: Technical S-curves, flat but complex
@@ -364,14 +459,14 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       } else if (trackTheme === 'mountain_pass') {
         // Mountain Pass: Extreme elevation, sharp curves
         for (let i = 0; i < 12; i++) {
-          addHill(50, 50, 50, (random() - 0.5) * 200);
-          addCurve(40, 40, 40, (random() > 0.5 ? 1 : -1) * 6, 0);
+          addHill(50, 50, 50, (seededRandom() - 0.5) * 200);
+          addCurve(40, 40, 40, (seededRandom() > 0.5 ? 1 : -1) * 6, 0);
         }
       } else if (trackTheme === 'urban_downtown') {
         // Urban Downtown: Grid-like, many straights and 90 degree turns
         for (let i = 0; i < 15; i++) {
           addStraight(100);
-          addCurve(20, 20, 20, (random() > 0.5 ? 1 : -1) * 8, 0);
+          addCurve(20, 20, 20, (seededRandom() > 0.5 ? 1 : -1) * 8, 0);
         }
       }
 
@@ -381,34 +476,34 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       // Add Checkpoints
       const checkpointInterval = Math.floor(segments.length / 4);
       for (let n = checkpointInterval; n < segments.length; n += checkpointInterval) {
-        segments[n].checkpoint = true;
+        segments[n].isCheckpoint = true;
       }
 
       // Add scenery based on theme
       for (let n = 0; n < segments.length; n += 6) {
-        if (random() > 0.3) {
-          const side = random() > 0.5 ? 1 : -1;
-          const offset = (1.5 + random() * 3) * side;
+        if (seededRandom() > 0.3) {
+          const side = seededRandom() > 0.5 ? 1 : -1;
+          const offset = (1.5 + seededRandom() * 3) * side;
           let source = 'tree';
           
           if (trackTheme === 'neon_city') {
-            source = random() > 0.6 ? 'building' : 'lamp';
+            source = seededRandom() > 0.6 ? 'building' : 'lamp';
           } else if (trackTheme === 'coastal_highway') {
-            source = random() > 0.7 ? 'rock' : 'tree'; // Tree will be palm-like
+            source = seededRandom() > 0.7 ? 'rock' : 'tree'; // Tree will be palm-like
           } else if (trackTheme === 'desert_canyon') {
-            source = random() > 0.7 ? 'rock' : 'cactus';
+            source = seededRandom() > 0.7 ? 'rock' : 'cactus';
           } else if (trackTheme === 'cyber_industrial') {
-            source = random() > 0.5 ? 'building' : 'lamp'; // Industrial buildings/lamps
+            source = seededRandom() > 0.5 ? 'building' : 'lamp'; // Industrial buildings/lamps
           } else if (trackTheme === 'mountain_pass') {
-            source = random() > 0.6 ? 'rock' : 'pine';
+            source = seededRandom() > 0.6 ? 'rock' : 'pine';
           } else if (trackTheme === 'urban_downtown') {
-            source = random() > 0.4 ? 'building' : 'lamp';
+            source = seededRandom() > 0.4 ? 'building' : 'lamp';
           }
 
           segments[n].sprites.push({ 
             source, 
             offset: offset, 
-            scale: 1.5 + random() * 2 
+            scale: 1.5 + seededRandom() * 2 
           });
         }
       }
@@ -419,17 +514,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     resetTrack();
 
     // Projection
-    const project = (p: { world: { x: number; y: number; z: number }; screen: { x: number; y: number; w: number } }, cameraX: number, cameraY: number, cameraZ: number) => {
-      const worldX = p.world.x - cameraX;
-      const worldY = p.world.y - cameraY;
-      const worldZ = p.world.z - cameraZ;
-      const scale = CAMERA_DEPTH / worldZ;
-      p.screen.x = Math.round((SCREEN_WIDTH / 2) + (scale * worldX * SCREEN_WIDTH / 2));
-      p.screen.y = Math.round((SCREEN_HEIGHT / 2) - (scale * worldY * SCREEN_HEIGHT / 2));
-      p.screen.w = Math.round(scale * ROAD_WIDTH * SCREEN_WIDTH / 2);
+    const projectPoint = (p: Point, cameraX: number, cameraY: number, cameraZ: number) => {
+      project(p, cameraX, cameraY, cameraZ, SCREEN_WIDTH, SCREEN_HEIGHT);
     };
-
-    const findSegment = (z: number) => segments[Math.floor(z / SEGMENT_LENGTH) % segments.length];
 
     // Main Loop
     let lastTime = Date.now();
@@ -467,6 +554,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
     let isSlipstreaming = false;
     let screenShake = 0;
 
+    /**
+     * Updates the game state for a single frame.
+     * @param {number} dt Delta time in seconds.
+     */
     const update = (dt: number) => {
       if (finished) {
         audioManager.stopMusic();
@@ -478,10 +569,19 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         return;
       }
 
-      // Update screen shake
+      updateEnvironment(dt);
+      updatePlayer(dt);
+      updateOpponents(dt);
+      updateHUD();
+    };
+
+    /**
+     * Updates environmental effects like particles and weather.
+     * @param {number} dt Delta time in seconds.
+     */
+    const updateEnvironment = (dt: number) => {
       if (screenShake > 0) screenShake -= dt * 10;
 
-      // Update Particles
       smokeParticles = smokeParticles.filter(p => {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
@@ -502,24 +602,21 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         p.x += p.vx * dt;
         p.y += p.vy * dt;
         p.life -= dt * 3;
-        p.vy += dt * 500; // Gravity
+        p.vy += dt * 500;
         return p.life > 0;
       });
 
-      // Checkpoint Timer Update
       checkpointTime -= dt;
       if (checkpointTime <= 0) {
         checkpointTime = 0;
-        // Penalties for running out of time
         speed = Math.max(0, speed - 5000 * dt);
         damage = Math.min(100, damage + 5 * dt);
       }
 
-      // Weather Updates
       if (weather === 'rain') {
         rainParticles.forEach(p => {
           p.y += p.speed;
-          p.x += (speed / maxSpeed) * 5; // Wind effect based on speed
+          p.x += (speed / maxSpeed) * 5;
           if (p.y > SCREEN_HEIGHT) {
             p.y = -20;
             p.x = Math.random() * SCREEN_WIDTH;
@@ -527,129 +624,47 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         });
       }
 
-      const playerSegment = findSegment(position + playerZ);
-      const speedPercent = speed / maxSpeed;
-
-      // Checkpoint Passing Detection
-      if (playerSegment.checkpoint && !playerSegment.passed) {
-        playerSegment.passed = true;
-        checkpointTime = Math.min(99, checkpointTime + 30);
-        audioManager.playTurbo(); // Reuse sound for feedback
-        setCheckpointNotify(true);
-        setTimeout(() => setCheckpointNotify(false), 2000);
-      }
-
-      // Smoke Updates
-      for (let i = smokeParticles.length - 1; i >= 0; i--) {
-        const p = smokeParticles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life -= dt;
-        p.size += dt * 30;
-        if (p.life <= 0) smokeParticles.splice(i, 1);
-      }
-
-      // Slipstream Updates
       for (let i = slipstreamParticles.length - 1; i >= 0; i--) {
         const p = slipstreamParticles[i];
         p.life -= dt;
         p.opacity = p.life * 0.5;
         if (p.life <= 0) slipstreamParticles.splice(i, 1);
       }
+    };
 
-      // Trigger Smoke & Drift Mechanic
+    /**
+     * Updates player physics and input handling.
+     * @param {number} dt Delta time in seconds.
+     */
+    const updatePlayer = (dt: number) => {
+      const playerSegment = findSegment(position + playerZ);
+      const speedPercent = speed / maxSpeed;
+
+      if (playerSegment.isCheckpoint && !playerSegment.hasPassed) {
+        playerSegment.hasPassed = true;
+        checkpointTime = Math.min(99, checkpointTime + 30);
+        audioManager.playTurbo();
+        setCheckpointNotify(true);
+        setTimeout(() => setCheckpointNotify(false), 2000);
+      }
+
       const isBraking = keysRef.current['ArrowDown'] || keysRef.current['KeyS'];
       const isAccelerating = keysRef.current['ArrowUp'] || keysRef.current['KeyW'];
-      const isSteering = keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] || keysRef.current['ArrowRight'] || keysRef.current['KeyD'] || (useTilt && Math.abs(tiltRef.current) > 0.1);
+      const isSteering = keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] || 
+                         keysRef.current['ArrowRight'] || keysRef.current['KeyD'] || 
+                         (useTilt && Math.abs(tiltRef.current) > 0.1);
       const isDrifting = isBraking && isSteering && speed > maxSpeed * 0.2;
 
-      // Start Smoke Effect
-      const raceTime = (Date.now() - startTime) / 1000;
-      if (raceTime < 2 && speed < 5000 && isAccelerating) {
-        for (let i = 0; i < 4; i++) {
-          smokeParticles.push({
-            x: SCREEN_WIDTH / 2 + (Math.random() - 0.5) * 140,
-            y: SCREEN_HEIGHT - 50,
-            vx: (Math.random() - 0.5) * 15,
-            vy: -Math.random() * 8 - 4,
-            life: 1.0 + Math.random() * 0.5,
-            size: 25 + Math.random() * 25,
-            color: 'rgba(220, 220, 220, 0.6)'
-          });
-        }
+      // Particles & Audio
+      if (isDrifting || (isBraking && speed > 1000)) {
+        spawnSmoke(isDrifting, playerSegment.curve);
       }
-
-      // Visual Steering/Drift Angle
-      const steeringInput = (keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] ? -1 : 0) + 
-                          (keysRef.current['ArrowRight'] || keysRef.current['KeyD'] ? 1 : 0) + 
-                          (useTilt ? tiltRef.current : 0);
-      const targetSteerAngle = steeringInput * 0.12;
-      const targetDriftAngle = isDrifting ? (steeringInput < 0 ? -0.4 : 0.4) : targetSteerAngle;
-      driftAngle = driftAngle + (targetDriftAngle - driftAngle) * 0.1;
-
-      // Haptic Feedback
-      if (isDrifting && Math.random() > 0.85) {
-        navigator.vibrate?.(15);
-      }
-
-      // Audio Update
       audioManager.update(speedPercent, isDrifting, isBraking);
 
-      if ((isBraking && speed > 1000) || isDrifting) {
-        const smokeCount = isDrifting ? 4 : 2;
-        const smokeColor = weather === 'rain' ? 'rgba(200, 200, 255, 0.3)' : (damage > 70 ? 'rgba(80, 80, 80, 0.4)' : 'rgba(255, 255, 255, 0.4)');
-        for (let i = 0; i < smokeCount; i++) {
-          smokeParticles.push({
-            x: SCREEN_WIDTH / 2 + (Math.random() - 0.5) * 140 + (isDrifting ? driftAngle * 100 : 0),
-            y: SCREEN_HEIGHT - 50 + (Math.random() - 0.5) * 10,
-            vx: (Math.random() - 0.5) * 4 + (isDrifting ? -playerSegment.curve * 5 : 0),
-            vy: -Math.random() * 2 - 1,
-            life: 0.4 + Math.random() * 0.6,
-            size: 15 + Math.random() * 15,
-            color: smokeColor
-          });
-        }
-      }
+      // Turbo
+      updateTurbo(dt, isDrifting);
 
-      // Spawn Turbo Particles
-      if (turboActive) {
-        for (let i = 0; i < 5; i++) {
-          turboParticles.push({
-            x: SCREEN_WIDTH / 2 + (Math.random() - 0.5) * 40,
-            y: SCREEN_HEIGHT - 40,
-            vx: (Math.random() - 0.5) * 50,
-            vy: 100 + Math.random() * 200,
-            life: 0.3,
-            size: 10 + Math.random() * 10,
-            color: Math.random() > 0.5 ? '#3b82f6' : '#60a5fa'
-          });
-        }
-      }
-
-      // Turbo Logic
-      const shiftKey = keysRef.current['ShiftLeft'] || keysRef.current['ShiftRight'];
-      const ctrlKey = keysRef.current['ControlLeft'] || keysRef.current['ControlRight'];
-
-      if (turboActive) {
-        turboDuration -= dt;
-        turboMeter = (turboDuration / TURBO_BOOST_DURATION) * 100;
-        speed += TURBO_BOOST_ACCEL * dt;
-        if (turboDuration <= 0) {
-          turboActive = false;
-          turboMeter = 0;
-        }
-      } else {
-        if (shiftKey || isDrifting) {
-          const chargeMultiplier = isDrifting ? 2.5 : 1.0;
-          turboMeter = Math.min(100, turboMeter + TURBO_CHARGE_RATE * chargeMultiplier * dt);
-        }
-        if (ctrlKey && turboMeter >= 100) {
-          turboActive = true;
-          turboDuration = TURBO_BOOST_DURATION;
-          audioManager.playTurbo();
-        }
-      }
-
+      // Movement
       const oldPosition = position;
       position = (position + dt * speed);
       
@@ -664,133 +679,163 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         }
       }
 
-      // Controls
       const grip = (weather === 'rain' ? 0.65 : 1.0) + (tireGrip / 100);
       const slipstreamBoost = isSlipstreaming ? 1.25 : 1.0;
       const driftFactor = isDrifting ? 3.2 : 1.0;
       const driftSlowdown = isDrifting ? 0.985 : 1.0;
-
-      // Handling response: more sensitive at low speeds, stable at high speeds
       const handlingResponse = 4.5 * (1 - (speedPercent * 0.3));
-      // Damage impact on handling
       const currentHandling = handlingResponse * (1 - (damage / 100) * 0.4);
 
-      if (keysRef.current['ArrowUp'] || keysRef.current['KeyW']) {
-        // Damage impact on acceleration
+      if (isAccelerating) {
         const currentAccel = (turboActive ? TURBO_BOOST_ACCEL : accel) * (1 - (damage / 100) * 0.3);
         speed += currentAccel * dt * grip * slipstreamBoost;
+      } else if (isBraking) {
+        speed += breaking * dt;
+      } else {
+        speed += decel * dt;
       }
-      else if (isBraking) speed += breaking * dt;
-      else speed += decel * dt;
 
       speed *= driftSlowdown;
 
-      if (keysRef.current['ArrowLeft'] || keysRef.current['KeyA']) playerX -= dt * currentHandling * driftFactor * speedPercent * grip;
-      if (keysRef.current['ArrowRight'] || keysRef.current['KeyD']) playerX += dt * currentHandling * driftFactor * speedPercent * grip;
-      
-      if (useTilt && Math.abs(tiltRef.current) > 0.1) {
-        playerX += dt * currentHandling * driftFactor * speedPercent * grip * tiltRef.current * 2.5;
-      }
+      const steeringInput = (keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] ? -1 : 0) + 
+                            (keysRef.current['ArrowRight'] || keysRef.current['KeyD'] ? 1 : 0) + 
+                            (useTilt ? tiltRef.current : 0);
 
-      // Off-road penalty
+      playerX += steeringInput * dt * currentHandling * driftFactor * speedPercent * grip;
+
       if ((playerX < -1) || (playerX > 1)) {
         if (speed > offRoadLimit) speed += offRoadDecel * dt;
-        // Off-road damage
-        if (speed > offRoadLimit * 2) {
-          damage = Math.min(100, damage + dt * 5);
-        }
+        if (speed > offRoadLimit * 2) damage = Math.min(100, damage + dt * 5);
       }
 
       playerX = Math.max(-2, Math.min(2, playerX));
-      
-      // Speed limits
-      const damageFactor = 1 - (damage / 100) * 0.5; // Max 50% speed reduction
+      playerX -= (dt * speedPercent * playerSegment.curve * 1.5);
+
+      const damageFactor = 1 - (damage / 100) * 0.5;
       const currentMax = (turboActive ? TURBO_MAX_SPEED : maxSpeed) * damageFactor;
       speed = Math.max(0, Math.min(currentMax, speed));
 
-      // Curve centrifugal force
-      playerX -= (dt * speedPercent * playerSegment.curve * 1.5);
+      const targetDriftAngle = isDrifting ? (steeringInput < 0 ? -0.4 : 0.4) : steeringInput * 0.12;
+      driftAngle = driftAngle + (targetDriftAngle - driftAngle) * 0.1;
+    };
 
-      // Update Opponents (Reactive AI)
-      isSlipstreaming = false;
+    /**
+     * Spawns smoke particles based on car state.
+     * @param {boolean} isDrifting Whether the car is drifting.
+     * @param {number} curve Current road curve.
+     */
+    const spawnSmoke = (isDrifting: boolean, curve: number) => {
+      const smokeCount = isDrifting ? 4 : 2;
+      const smokeColor = weather === 'rain' ? 'rgba(200, 200, 255, 0.3)' : 
+                         (damage > 70 ? 'rgba(80, 80, 80, 0.4)' : 'rgba(255, 255, 255, 0.4)');
+      
+      for (let i = 0; i < smokeCount; i++) {
+        smokeParticles.push({
+          x: SCREEN_WIDTH / 2 + (Math.random() - 0.5) * 140 + (isDrifting ? driftAngle * 100 : 0),
+          y: SCREEN_HEIGHT - 50 + (Math.random() - 0.5) * 10,
+          vx: (Math.random() - 0.5) * 4 + (isDrifting ? -curve * 5 : 0),
+          vy: -Math.random() * 2 - 1,
+          life: 0.4 + Math.random() * 0.6,
+          size: 15 + Math.random() * 15,
+          color: smokeColor
+        });
+      }
+    };
 
-      const checkSlipstream = (otherZ: number, otherX: number) => {
-        let zDiff = otherZ - position;
-        if (zDiff < -trackLength / 2) zDiff += trackLength;
-        if (zDiff > trackLength / 2) zDiff -= trackLength;
+    /**
+     * Updates turbo charging and activation.
+     * @param {number} dt Delta time in seconds.
+     * @param {boolean} isDrifting Whether the car is drifting.
+     */
+    const updateTurbo = (dt: number, isDrifting: boolean) => {
+      const shiftKey = keysRef.current['ShiftLeft'] || keysRef.current['ShiftRight'];
+      const ctrlKey = keysRef.current['ControlLeft'] || keysRef.current['ControlRight'];
 
-        if (zDiff > 500 && zDiff < 4000 && Math.abs(otherX - playerX) < 0.35) {
-          isSlipstreaming = true;
-          // Add slipstream particles
-          if (Math.random() > 0.4) {
-            slipstreamParticles.push({
-              x: otherX + (Math.random() - 0.5) * 0.2,
-              z: otherZ - 100 - Math.random() * 500,
-              life: 0.6,
-              opacity: 0.6
-            });
-          }
+      if (turboActive) {
+        turboDuration -= dt;
+        turboMeter = (turboDuration / TURBO_BOOST_DURATION) * 100;
+        speed += TURBO_BOOST_ACCEL * dt;
+        if (turboDuration <= 0) {
+          turboActive = false;
+          turboMeter = 0;
         }
-      };
+        
+        // Turbo particles
+        for (let i = 0; i < 5; i++) {
+          turboParticles.push({
+            x: SCREEN_WIDTH / 2 + (Math.random() - 0.5) * 40,
+            y: SCREEN_HEIGHT - 40,
+            vx: (Math.random() - 0.5) * 50,
+            vy: 100 + Math.random() * 200,
+            life: 0.3,
+            size: 10 + Math.random() * 10,
+            color: Math.random() > 0.5 ? '#3b82f6' : '#60a5fa'
+          });
+        }
+      } else {
+        if (shiftKey || isDrifting) {
+          const chargeMultiplier = isDrifting ? 2.5 : 1.0;
+          turboMeter = Math.min(100, turboMeter + TURBO_CHARGE_RATE * chargeMultiplier * dt);
+        }
+        if (ctrlKey && turboMeter >= 100) {
+          turboActive = true;
+          turboDuration = TURBO_BOOST_DURATION;
+          audioManager.playTurbo();
+        }
+      }
+    };
+
+    /**
+     * Updates AI opponents' behavior.
+     * @param {number} dt Delta time in seconds.
+     */
+    const updateOpponents = (dt: number) => {
+      isSlipstreaming = false;
 
       opponents.forEach(opp => {
         const oppSegment = findSegment(opp.z);
-        const oppSpeedPercent = opp.speed / maxSpeed;
-
-        // 1. Look Ahead & Speed Control (Sophisticated Braking)
-        // AI looks ahead to adjust speed for curves
+        
+        // 1. Look Ahead & Speed Control
         let lookAheadZ = opp.z + 2000;
         let lookAheadSegment = findSegment(lookAheadZ);
         let curveAhead = Math.abs(lookAheadSegment.curve);
         
-        // Target speed based on curve
         const baseTargetSpeed = 7500 + (level * 400);
         const curvePenalty = curveAhead * 5000;
         let targetSpeed = Math.max(5000, baseTargetSpeed - curvePenalty);
         
-        // Reactive to player position and speed
         let zDiff = opp.z - position;
         if (zDiff < -trackLength / 2) zDiff += trackLength;
         if (zDiff > trackLength / 2) zDiff -= trackLength;
 
-        // If player is ahead and close, adjust speed to avoid constant ramming or to prepare for overtake
         if (zDiff < 0 && zDiff > -2500) {
           if (speed < opp.speed && Math.abs(opp.offset - playerX) < 0.4) {
             targetSpeed = Math.min(targetSpeed, speed + 1000);
           }
         }
 
-        // Smoothly adjust speed (Acceleration/Braking)
-        if (opp.speed < targetSpeed) {
-          opp.speed += 2500 * dt;
-        } else {
-          opp.speed -= 5000 * dt; // Stronger braking for turns
-        }
+        if (opp.speed < targetSpeed) opp.speed += 2500 * dt;
+        else opp.speed -= 5000 * dt;
 
-        // 2. Path Following & Dynamic Lane Changing
-        // AI tries to take the racing line but reacts to player
-        let desiredOffset = -oppSegment.curve * 0.6; // Racing line (lean into curve)
+        // 2. Path Following & Overtaking
+        let desiredOffset = -oppSegment.curve * 0.6;
 
-        // Overtaking / Blocking logic
         if (Math.abs(zDiff) < 3000) {
           if (zDiff < 0) { 
-            // AI is behind: Aggressive overtaking
             if (Math.abs(opp.offset - playerX) < 0.6) {
-              // Choose a side to pass
               const passSide = playerX > 0 ? -0.8 : 0.8;
               desiredOffset = playerX + passSide;
-              opp.speed += (500 + level * 100) * dt; // Overtake boost
+              opp.speed += (500 + level * 100) * dt;
             }
           } else { 
-            // AI is ahead: Defensive blocking
             const blockThreshold = Math.min(1.2, 0.3 + (level * 0.08));
             if (Math.abs(opp.offset - playerX) < blockThreshold) {
-              desiredOffset = playerX; // Mirror player to block
+              desiredOffset = playerX;
             }
           }
         }
 
-        // Avoid other AI cars
+        // Avoid other AI
         opponents.forEach(other => {
           if (other === opp) return;
           let ozDiff = opp.z - other.z;
@@ -802,67 +847,20 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
           }
         });
 
-        // Smoothly apply steering
         const steerSpeed = 1.0 + (level * 0.1);
         const steerDiff = (desiredOffset - opp.offset);
         opp.offset += steerDiff * steerSpeed * dt;
         opp.offset = Math.max(-1.4, Math.min(1.4, opp.offset));
         
-        // Update visual angle for AI
         const targetAngle = steerDiff * 0.5 + (oppSegment.curve * 0.2);
         opp.visualAngle = opp.visualAngle + (targetAngle - opp.visualAngle) * 0.1;
 
         // 3. Collision Detection
         checkSlipstream(opp.z, opp.offset);
 
-        // Collision Detection
         if (Math.abs(zDiff) < 400 && Math.abs(opp.offset - playerX) < 0.3) {
-          const impact = Math.abs(speed - opp.speed) / 1000;
-          const damageBase = 0.5 + (level * 0.2);
-          damage = Math.min(100, damage + impact + damageBase);
-          audioManager.playCollision(impact / 10);
-          screenShake = impact * 5;
-
-          for (let i = 0; i < 15; i++) {
-            sparkParticles.push({
-              x: SCREEN_WIDTH / 2 + (Math.random() - 0.5) * 100,
-              y: SCREEN_HEIGHT - 100,
-              vx: (Math.random() - 0.5) * 500,
-              vy: -Math.random() * 300,
-              life: 0.5 + Math.random() * 0.5,
-              size: 2 + Math.random() * 3,
-              color: '#fbbf24'
-            });
-          }
-          
-          if (speed > opp.speed) speed *= 0.8;
-          else opp.speed *= 0.8;
-          playerX += (playerX > opp.offset ? 0.2 : -0.2);
+          handleCollision(opp);
         }
-
-        // If player is close
-        if (Math.abs(zDiff) < 3000) {
-          if (zDiff > 0) { 
-            // AI is ahead: Defensive driving
-            const mirrorThreshold = 0.3 + (level * 0.05);
-            if (Math.abs(opp.offset - playerX) < mirrorThreshold) {
-              opp.offset += (playerX - opp.offset) * (0.8 + level * 0.1) * dt;
-            }
-          } else { 
-            // AI is behind: Aggressive overtaking
-            if (Math.abs(opp.offset - playerX) < 0.5) {
-              const overtakeDir = opp.offset > 0 ? -1.2 : 1.2;
-              opp.offset += overtakeDir * 2.0 * dt;
-              opp.speed += 1000 * dt; // Extra boost to pass
-            }
-          }
-        }
-
-        // Lane Keeping & Natural Wandering
-        if (opp.offset > 1.2) opp.offset = 1.2;
-        else if (opp.offset < -1.2) opp.offset = -1.2;
-        
-        opp.offset += Math.sin(Date.now() / 1000 + opp.z) * 0.05 * dt;
 
         // 4. Update Z position
         opp.z = (opp.z + dt * opp.speed);
@@ -871,8 +869,66 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
           opp.lap++;
         }
       });
+    };
 
-      // Calculate Leaderboard
+    /**
+     * Handles collision between player and an opponent.
+     * @param {Opponent} opp The opponent involved in the collision.
+     */
+    const handleCollision = (opp: Opponent) => {
+      const impact = Math.abs(speed - opp.speed) / 1000;
+      const damageBase = 0.5 + (level * 0.2);
+      damage = Math.min(100, damage + impact + damageBase);
+      audioManager.playCollision(impact / 10);
+      screenShake = impact * 5;
+
+      for (let i = 0; i < 15; i++) {
+        sparkParticles.push({
+          x: SCREEN_WIDTH / 2 + (Math.random() - 0.5) * 100,
+          y: SCREEN_HEIGHT - 100,
+          vx: (Math.random() - 0.5) * 500,
+          vy: -Math.random() * 300,
+          life: 0.5 + Math.random() * 0.5,
+          size: 2 + Math.random() * 3,
+          color: '#fbbf24'
+        });
+      }
+      
+      if (speed > opp.speed) speed *= 0.8;
+      else opp.speed *= 0.8;
+      
+      // Push player away from opponent to prevent getting stuck
+      const pushFactor = 0.3 + Math.random() * 0.2;
+      playerX += (playerX > opp.offset ? pushFactor : -pushFactor);
+    };
+
+    /**
+     * Checks if the player is in the slipstream of another car.
+     * @param {number} otherZ Z position of the other car.
+     * @param {number} otherX X position of the other car.
+     */
+    const checkSlipstream = (otherZ: number, otherX: number) => {
+      let zDiff = otherZ - position;
+      if (zDiff < -trackLength / 2) zDiff += trackLength;
+      if (zDiff > trackLength / 2) zDiff -= trackLength;
+
+      if (zDiff > 500 && zDiff < 4000 && Math.abs(otherX - playerX) < 0.35) {
+        isSlipstreaming = true;
+        if (Math.random() > 0.4) {
+          slipstreamParticles.push({
+            x: otherX + (Math.random() - 0.5) * 0.2,
+            z: otherZ - 100 - Math.random() * 500,
+            life: 0.6,
+            opacity: 0.6
+          });
+        }
+      }
+    };
+
+    /**
+     * Updates the HUD state.
+     */
+    const updateHUD = () => {
       const allRacers = [
         { name: 'You', distance: (lap - 1) * trackLength + position, lap: lap, isPlayer: true, id: 'local' },
         ...opponents.map(o => ({ name: o.name, distance: (o.lap - 1) * trackLength + o.z, lap: o.lap, isPlayer: false, id: o.name }))
@@ -897,56 +953,6 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
           ...opponents.map(o => o.z / trackLength)
         ]
       }));
-    };
-
-    const drawCityscape = (ctx: CanvasRenderingContext2D, pos: number) => {
-      const offset = (pos * 0.1) % SCREEN_WIDTH;
-      ctx.fillStyle = '#0f172a';
-      for (let i = -1; i < 3; i++) {
-        const x = i * 400 - offset;
-        // Building silhouettes
-        ctx.fillRect(x + 50, SCREEN_HEIGHT / 2 - 150, 80, 150);
-        ctx.fillRect(x + 150, SCREEN_HEIGHT / 2 - 200, 100, 200);
-        ctx.fillRect(x + 280, SCREEN_HEIGHT / 2 - 120, 60, 120);
-        
-        // Windows
-        ctx.fillStyle = '#fef08a';
-        for (let j = 0; j < 5; j++) {
-          if (Math.random() > 0.3) ctx.fillRect(x + 60, SCREEN_HEIGHT / 2 - 140 + j * 25, 10, 10);
-          if (Math.random() > 0.3) ctx.fillRect(x + 160, SCREEN_HEIGHT / 2 - 190 + j * 30, 15, 15);
-        }
-        ctx.fillStyle = '#0f172a';
-      }
-    };
-
-    const drawDunes = (ctx: CanvasRenderingContext2D, pos: number) => {
-      const offset = (pos * 0.05) % SCREEN_WIDTH;
-      ctx.fillStyle = '#f59e0b';
-      ctx.beginPath();
-      ctx.moveTo(0, SCREEN_HEIGHT / 2);
-      for (let i = -1; i < 3; i++) {
-        const x = i * SCREEN_WIDTH - offset;
-        ctx.quadraticCurveTo(x + SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2 - 100, x + SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 20);
-        ctx.quadraticCurveTo(x + 3 * SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2 - 80, x + SCREEN_WIDTH, SCREEN_HEIGHT / 2);
-      }
-      ctx.lineTo(SCREEN_WIDTH, SCREEN_HEIGHT / 2);
-      ctx.fill();
-    };
-
-    const drawMountains = (ctx: CanvasRenderingContext2D, pos: number) => {
-      const offset = (pos * 0.02) % SCREEN_WIDTH;
-      ctx.fillStyle = '#1e293b';
-      ctx.beginPath();
-      ctx.moveTo(0, SCREEN_HEIGHT / 2);
-      for (let i = -1; i < 3; i++) {
-        const x = i * SCREEN_WIDTH - offset;
-        ctx.lineTo(x + SCREEN_WIDTH * 0.2, SCREEN_HEIGHT / 2 - 150);
-        ctx.lineTo(x + SCREEN_WIDTH * 0.4, SCREEN_HEIGHT / 2 - 80);
-        ctx.lineTo(x + SCREEN_WIDTH * 0.6, SCREEN_HEIGHT / 2 - 200);
-        ctx.lineTo(x + SCREEN_WIDTH * 0.8, SCREEN_HEIGHT / 2 - 100);
-        ctx.lineTo(x + SCREEN_WIDTH, SCREEN_HEIGHT / 2);
-      }
-      ctx.fill();
     };
 
     const draw = () => {
@@ -1011,8 +1017,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       for (let n = 0; n < DRAW_DISTANCE; n++) {
         const segment = segments[(baseSegment.index + n) % segments.length];
         const looped = segment.index < baseSegment.index;
-        project(segment.p1, playerX * ROAD_WIDTH - x, playerY + CAMERA_HEIGHT, position - (looped ? trackLength : 0));
-        project(segment.p2, playerX * ROAD_WIDTH - x - dx, playerY + CAMERA_HEIGHT, position - (looped ? trackLength : 0));
+        projectPoint(segment.p1, playerX * ROAD_WIDTH - x, playerY + CAMERA_HEIGHT, position - (looped ? trackLength : 0));
+        projectPoint(segment.p2, playerX * ROAD_WIDTH - x - dx, playerY + CAMERA_HEIGHT, position - (looped ? trackLength : 0));
 
         x += dx;
         dx += segment.curve;
@@ -1020,23 +1026,23 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         if (segment.p1.screen.y <= segment.p2.screen.y || segment.p2.screen.y >= maxY) continue;
 
         // Draw Grass
-        ctx.fillStyle = segment.color.grass;
+        ctx.fillStyle = segment.colors.grass;
         ctx.fillRect(0, segment.p2.screen.y, SCREEN_WIDTH, segment.p1.screen.y - segment.p2.screen.y);
 
         // Draw Road
-        drawPolygon(ctx, segment.p1.screen.x, segment.p1.screen.y, segment.p1.screen.w, segment.p2.screen.x, segment.p2.screen.y, segment.p2.screen.w, segment.color.road, true);
+        drawPolygon(ctx, segment.p1.screen.x, segment.p1.screen.y, segment.p1.screen.w, segment.p2.screen.x, segment.p2.screen.y, segment.p2.screen.w, segment.colors.road, true);
 
         // Rumble
         const r1 = segment.p1.screen.w / 10;
         const r2 = segment.p2.screen.w / 10;
-        drawPolygon(ctx, segment.p1.screen.x - segment.p1.screen.w - r1, segment.p1.screen.y, r1, segment.p2.screen.x - segment.p2.screen.w - r2, segment.p2.screen.y, r2, segment.color.rumble);
-        drawPolygon(ctx, segment.p1.screen.x + segment.p1.screen.w + r1, segment.p1.screen.y, r1, segment.p2.screen.x + segment.p2.screen.w + r2, segment.p2.screen.y, r2, segment.color.rumble);
+        drawPolygon(ctx, segment.p1.screen.x - segment.p1.screen.w - r1, segment.p1.screen.y, r1, segment.p2.screen.x - segment.p2.screen.w - r2, segment.p2.screen.y, r2, segment.colors.rumble);
+        drawPolygon(ctx, segment.p1.screen.x + segment.p1.screen.w + r1, segment.p1.screen.y, r1, segment.p2.screen.x + segment.p2.screen.w + r2, segment.p2.screen.y, r2, segment.colors.rumble);
 
         // Lanes
-        if (segment.color.lane) {
+        if (segment.colors.lane) {
           const l1 = segment.p1.screen.w / 40;
           const l2 = segment.p2.screen.w / 40;
-          drawPolygon(ctx, segment.p1.screen.x, segment.p1.screen.y, l1, segment.p2.screen.x, segment.p2.screen.y, l2, segment.color.lane);
+          drawPolygon(ctx, segment.p1.screen.x, segment.p1.screen.y, l1, segment.p2.screen.x, segment.p2.screen.y, l2, segment.colors.lane);
         }
 
         maxY = segment.p1.screen.y;
@@ -1047,12 +1053,12 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
         const segment = segments[(baseSegment.index + n) % segments.length];
         
         // Checkpoints
-        if (segment.checkpoint) {
+        if (segment.isCheckpoint) {
           const archX = segment.p1.screen.x;
           const archY = segment.p1.screen.y;
           const archW = segment.p1.screen.w;
           const archH = archW * 0.6;
-          drawCheckpoint(ctx, archX, archY, archW, archH, segment.passed || false);
+          drawCheckpoint(ctx, archX, archY, archW, archH, segment.hasPassed || false);
         }
 
         // Scenery
@@ -1174,6 +1180,26 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       animationFrameId = requestAnimationFrame(loop);
     };
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      keysRef.current[e.code] = true;
+      if (e.code === 'KeyP') togglePause();
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      keysRef.current[e.code] = false;
+    };
+
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+      if (useTilt && e.gamma !== null) {
+        // Normalize gamma (-90 to 90) to -1 to 1
+        tiltRef.current = Math.max(-1, Math.min(1, e.gamma / 45));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('deviceorientation', handleOrientation);
+
     loop();
 
     return () => {
@@ -1181,6 +1207,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({ level, trackTheme, carCo
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('deviceorientation', handleOrientation);
     };
   }, [level, onRaceEnd, isReady, carConfig, aspectRatio]);
 
