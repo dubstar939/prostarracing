@@ -323,18 +323,24 @@ export const RacingGame: React.FC<RacingGameProps> = ({
         sirenTimer: 0
       }
     ] : Array.from({ length: 7 }, (_, i) => {
-      const models: CarModelType[] = ['speedster', 'drifter', 'tank', 'interceptor'];
+      const models: CarModelType[] = ['speedster', 'drifter', 'tank'];
+      const model = models[i % models.length];
+      let baseSpeed = 6500 + (level * 250);
+      
+      if (model === 'speedster') baseSpeed += 1000;
+      if (model === 'tank') baseSpeed -= 500;
+      
       return {
         name: `CPU ${i + 1}`,
         offset: (i % 2 === 0 ? 0.5 : -0.5) + (Math.random() - 0.5) * 0.2,
         z: 2000 + i * 3000,
-        speed: 6500 + (level * 250) + Math.random() * 1500,
+        speed: baseSpeed + Math.random() * 1000,
         percent: 0,
         lap: 1,
         color: ['#ef4444', '#3b82f6', '#facc15', '#a855f7', '#ec4899', '#f97316', '#06b6d4', '#8b5cf6'][Math.floor(Math.random() * 8)],
         plate: generatePlate(),
         visualAngle: 0,
-        model: models[Math.floor(Math.random() * models.length)]
+        model: model
       };
     });
 
@@ -879,6 +885,12 @@ export const RacingGame: React.FC<RacingGameProps> = ({
         let curveAhead = Math.abs(lookAheadSegment.curve);
         
         let baseTargetSpeed = 7500 + (level * 400);
+        
+        // Model-specific speed adjustments
+        if (opp.model === 'speedster') baseTargetSpeed += 1200;
+        if (opp.model === 'tank') baseTargetSpeed -= 800;
+        if (opp.model === 'drifter') baseTargetSpeed += 400;
+
         if (mode === 'tokyo-expressway') {
           // Rival is much faster and more aggressive
           baseTargetSpeed = 9000 + (level * 600);
@@ -887,7 +899,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
           }
         }
         
-        const curvePenalty = curveAhead * 5000;
+        const curvePenalty = curveAhead * (opp.model === 'drifter' ? 2000 : 5000);
         let targetSpeed = Math.max(5000, baseTargetSpeed - curvePenalty);
         
         let zDiff = opp.z - position;
@@ -925,15 +937,15 @@ export const RacingGame: React.FC<RacingGameProps> = ({
               opp.speed += (500 + level * 100) * dt;
             }
           } else { 
-            const blockThreshold = Math.min(1.2, 0.3 + (level * 0.08));
+            const blockThreshold = opp.model === 'tank' ? 1.5 : Math.min(1.2, 0.3 + (level * 0.08));
             if (Math.abs(opp.offset - playerX) < blockThreshold) {
               desiredOffset = playerX;
             }
           }
         }
 
-        // Aggressive Overtaking for Tokyo Expressway
-        if (mode === 'tokyo-expressway' && Math.abs(zDiff) < 4000 && Math.abs(opp.offset - playerX) < 0.8) {
+        // Aggressive Overtaking for Tokyo Expressway or Drifters
+        if ((mode === 'tokyo-expressway' || opp.model === 'drifter') && Math.abs(zDiff) < 4000 && Math.abs(opp.offset - playerX) < 0.8) {
           if (opp.isPolice) {
             desiredOffset = playerX; // Police tries to ram or block
           } else {
@@ -958,7 +970,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
           if (bustTimer > 3) {
             isBusted = true;
             finished = true;
-            onRaceEnd(99, Date.now() - startTime);
+            onRaceEnd(99, Date.now() - startTime, Math.floor(totalDriftScore));
           }
         } else if (opp.isPolice) {
           bustTimer = Math.max(0, bustTimer - dt);
@@ -977,6 +989,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({
         });
 
         let steerSpeed = 1.0 + (level * 0.1);
+        if (opp.model === 'drifter') steerSpeed *= 1.4;
+        if (opp.model === 'tank') steerSpeed *= 0.7;
+        if (opp.model === 'speedster') steerSpeed *= 0.8;
+        
         if (mode === 'tokyo-expressway') steerSpeed *= 1.5; // Faster steering for rival
         if (opp.isPolice) steerSpeed *= 2.0; // Even faster for police
         
@@ -1092,7 +1108,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
         if (playerSP <= 0 || rivalSP <= 0) {
           finished = true;
           audioManager.stopMusic();
-          onRaceEnd(playerSP > 0 ? 1 : 2, Date.now() - startTime);
+          onRaceEnd(playerSP > 0 ? 1 : 2, Date.now() - startTime, Math.floor(totalDriftScore));
           return;
         }
       }
