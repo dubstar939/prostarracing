@@ -1,5 +1,5 @@
 {
-  "name": "Pro Star-Racing",
-  "description": "A high-octane arcade racer featuring a 3D car garage, procedural car models (Speedster, Muscle, Tuner, Hyper, GT), drifting, slipstreaming, and real-time multiplayer.",
+  "name": "PRO STAR RACING Level Art Engine",
+  "description": "A retro-futuristic neon level art generator for 939PRO aesthetic race tracks.",
   "requestFramePermissions": []
 }

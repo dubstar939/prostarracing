@@ -1,14 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { audioManager } from '../services/audioService';
+import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Zap, Monitor } from 'lucide-react';
 
 import { drawCar, shadeColor } from '../utils/carRenderer';
-import { CarConfig, RaceMode, PERFORMANCE_PARTS, CarModelType, BiomeType } from '../types';
-import { BIOMES, TRACK_TILESET } from '../constants/assets';
 
-import { HUD } from './game/HUD';
-import { PauseMenu, CustomizationMenu } from './game/Menus';
-import { PreRaceMenu } from './game/PreRaceMenu';
+import { CarConfig, RaceMode, PERFORMANCE_PARTS, CarModelType } from '../types';
+
+import { BIOMES, TRACK_TILESET } from '../constants/assets';
 
 /**
  * Represents the available track themes in the game.
@@ -125,19 +124,6 @@ const easeIn = (a: number, b: number, percent: number): number => a + (b - a) * 
 const easeInOut = (a: number, b: number, percent: number): number => a + (b - a) * ((-Math.cos(percent * Math.PI) / 2) + 0.5);
 
 /**
- * Converts a hex color string to an rgba color string.
- * @param {string} hex The hex color string (e.g., "#ffffff").
- * @param {number} alpha The alpha value (0-1).
- * @returns {string} The rgba color string.
- */
-const hexToRgba = (hex: string, alpha: number): string => {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
-
-/**
  * Projects a 3D world point onto a 2D screen coordinate.
  * @param {Point} p The point to project.
  * @param {number} cameraX Camera X position.
@@ -178,21 +164,17 @@ const project = (
  */
 export const RacingGame: React.FC<RacingGameProps> = ({ 
   level, 
-  trackTheme: initialTrackTheme, 
+  trackTheme, 
   carConfig, 
   setCarConfig, 
-  mode: initialMode, 
+  mode, 
   onRaceEnd, 
   onBack 
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [gameState, setGameState] = useState<'menu' | 'racing' | 'customizing'>('menu');
   const [isReady, setIsReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [weather, setWeather] = useState<'clear' | 'rain' | 'fog'>('clear');
-  const [biome, setBiome] = useState<BiomeType>(initialTrackTheme as BiomeType || 'neon_city');
-  const [mode, setMode] = useState<RaceMode>(initialMode);
-  const [inventory, setInventory] = useState({ money: 5000, parts: [] });
 
   const [hud, setHud] = useState({
     speed: 0,
@@ -356,7 +338,21 @@ export const RacingGame: React.FC<RacingGameProps> = ({
       };
     });
 
-    const findSegment = (z: number): RoadSegment => segments[Math.floor(z / SEGMENT_LENGTH) % segments.length];
+    const findSegment = (z: number): RoadSegment => {
+      if (segments.length === 0) {
+        return {
+          index: 0,
+          p1: { world: { x: 0, y: 0, z: 0 }, screen: { x: 0, y: 0, w: 0 } },
+          p2: { world: { x: 0, y: 0, z: 0 }, screen: { x: 0, y: 0, w: 0 } },
+          curve: 0,
+          sprites: [],
+          colors: { road: '#000', grass: '#000', rumble: '#000' }
+        };
+      }
+      let index = Math.floor(z / SEGMENT_LENGTH) % segments.length;
+      if (index < 0) index += segments.length;
+      return segments[index];
+    };
     const getLastY = (): number => (segments.length > 0 ? segments[segments.length - 1].p2.world.y : 0);
 
     const addSegment = (curve: number, y: number, colors: RoadSegment['colors']) => {
@@ -400,7 +396,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
     const resetTrack = () => {
       segments = [];
       cityscapeRef.current = [];
-      audioManager.setTheme(biome);
+      audioManager.setTheme(trackTheme);
       
       // Simple seeded random for consistent tracks per level
       let seed = level * 12345;
@@ -465,7 +461,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
           altGrass: BIOMES.URBAN_DOWNTOWN.palette.env[1], 
           altRumble: '#000' 
         }
-      }[biome];
+      }[trackTheme];
 
       const addStraight = (length: number) => addRoad(length, length, length, 0, 0, themeColors);
       const addCurve = (enter: number, hold: number, leave: number, curve: number, hill: number) => addRoad(enter, hold, leave, curve, hill, themeColors);
@@ -492,37 +488,37 @@ export const RacingGame: React.FC<RacingGameProps> = ({
       addStraight(100);
 
       // Theme-specific layout patterns
-      if (biome === 'neon_city') {
+      if (trackTheme === 'neon_city') {
         // Neon City: Tight turns, many straights, high density
         for (let i = 0; i < 15; i++) {
           addStraight(50 + seededRandom() * 100);
           addCurve(20, 40, 20, (seededRandom() > 0.5 ? 1 : -1) * (4 + seededRandom() * 4), 0);
         }
-      } else if (biome === 'coastal_highway') {
+      } else if (trackTheme === 'coastal_highway') {
         // Coastal: Long sweeping curves, gentle hills
         for (let i = 0; i < 10; i++) {
           addHill(100, 100, 100, (seededRandom() - 0.5) * 40);
           addCurve(150, 200, 150, (seededRandom() - 0.5) * 3, 0);
         }
-      } else if (biome === 'desert_canyon') {
+      } else if (trackTheme === 'desert_canyon') {
         // Desert Canyon: Massive hills, sharp drops
         for (let i = 0; i < 10; i++) {
           addHill(100, 100, 100, (seededRandom() - 0.5) * 120);
           addCurve(80, 80, 80, (seededRandom() - 0.5) * 5, 0);
         }
-      } else if (biome === 'cyber_industrial') {
+      } else if (trackTheme === 'cyber_industrial') {
         // Industrial: Technical S-curves, flat but complex
         for (let i = 0; i < 12; i++) {
           addStraight(80);
           addSCurves();
         }
-      } else if (biome === 'mountain_pass') {
+      } else if (trackTheme === 'mountain_pass') {
         // Mountain Pass: Extreme elevation, sharp curves
         for (let i = 0; i < 12; i++) {
           addHill(50, 50, 50, (seededRandom() - 0.5) * 200);
           addCurve(40, 40, 40, (seededRandom() > 0.5 ? 1 : -1) * 6, 0);
         }
-      } else if (biome === 'urban_downtown') {
+      } else if (trackTheme === 'urban_downtown') {
         // Urban Downtown: Grid-like, many straights and 90 degree turns
         for (let i = 0; i < 15; i++) {
           addStraight(100);
@@ -546,17 +542,17 @@ export const RacingGame: React.FC<RacingGameProps> = ({
           const offset = (1.5 + seededRandom() * 3) * side;
           let source = 'tree';
           
-          if (biome === 'neon_city') {
+          if (trackTheme === 'neon_city') {
             source = seededRandom() > 0.6 ? 'building' : 'lamp';
-          } else if (biome === 'coastal_highway') {
+          } else if (trackTheme === 'coastal_highway') {
             source = seededRandom() > 0.7 ? 'rock' : 'tree'; // Tree will be palm-like
-          } else if (biome === 'desert_canyon') {
+          } else if (trackTheme === 'desert_canyon') {
             source = seededRandom() > 0.7 ? 'rock' : 'cactus';
-          } else if (biome === 'cyber_industrial') {
+          } else if (trackTheme === 'cyber_industrial') {
             source = seededRandom() > 0.5 ? 'building' : 'lamp'; // Industrial buildings/lamps
-          } else if (biome === 'mountain_pass') {
+          } else if (trackTheme === 'mountain_pass') {
             source = seededRandom() > 0.6 ? 'rock' : 'pine';
-          } else if (biome === 'urban_downtown') {
+          } else if (trackTheme === 'urban_downtown') {
             source = seededRandom() > 0.4 ? 'building' : 'lamp';
           }
 
@@ -619,7 +615,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
      * @param {number} dt Delta time in seconds.
      */
     const update = (dt: number) => {
-      if (finished) {
+      if (finished || segments.length === 0) {
         audioManager.stopMusic();
         return;
       }
@@ -676,11 +672,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({
       if (weather === 'rain') {
         rainParticles.forEach(p => {
           p.y += p.speed;
-          p.x += (speed / maxSpeed) * 15 * dt; // Dynamic wind based on speed
+          p.x += (speed / maxSpeed) * 5;
           if (p.y > SCREEN_HEIGHT) {
             p.y = -20;
             p.x = Math.random() * SCREEN_WIDTH;
-            p.speed = 15 + Math.random() * 20;
           }
         });
       }
@@ -1127,7 +1122,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
     };
 
     const draw = () => {
-      if (!ctx) return;
+      if (!ctx || segments.length === 0) return;
 
       ctx.save();
       if (screenShake > 0) {
@@ -1138,19 +1133,19 @@ export const RacingGame: React.FC<RacingGameProps> = ({
 
       // Sky (Gradient)
       const skyGrad = ctx.createLinearGradient(0, 0, 0, SCREEN_HEIGHT / 2);
-      if (biome === 'neon_city') {
+      if (trackTheme === 'neon_city') {
         skyGrad.addColorStop(0, BIOMES.NEON_CITY.palette.shadow);
         skyGrad.addColorStop(1, BIOMES.NEON_CITY.palette.env[0]);
-      } else if (biome === 'coastal_highway') {
+      } else if (trackTheme === 'coastal_highway') {
         skyGrad.addColorStop(0, BIOMES.COASTAL_HIGHWAY.palette.env[0]);
         skyGrad.addColorStop(1, BIOMES.COASTAL_HIGHWAY.palette.env[1]);
-      } else if (biome === 'desert_canyon') {
+      } else if (trackTheme === 'desert_canyon') {
         skyGrad.addColorStop(0, BIOMES.DESERT_CANYON.palette.env[1]);
         skyGrad.addColorStop(1, BIOMES.DESERT_CANYON.palette.env[2]);
-      } else if (biome === 'mountain_pass') {
+      } else if (trackTheme === 'mountain_pass') {
         skyGrad.addColorStop(0, BIOMES.MOUNTAIN_PASS.palette.env[1]);
         skyGrad.addColorStop(1, BIOMES.MOUNTAIN_PASS.palette.env[2]);
-      } else if (biome === 'urban_downtown') {
+      } else if (trackTheme === 'urban_downtown') {
         skyGrad.addColorStop(0, BIOMES.URBAN_DOWNTOWN.palette.shadow);
         skyGrad.addColorStop(1, BIOMES.URBAN_DOWNTOWN.palette.env[1]);
       } else {
@@ -1161,15 +1156,15 @@ export const RacingGame: React.FC<RacingGameProps> = ({
       ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
 
       // Draw Theme-specific background
-      if (biome === 'neon_city') {
+      if (trackTheme === 'neon_city') {
         drawCityscape(ctx, position);
-      } else if (biome === 'coastal_highway') {
+      } else if (trackTheme === 'coastal_highway') {
         drawCoastalSunset(ctx, position);
-      } else if (biome === 'desert_canyon') {
+      } else if (trackTheme === 'desert_canyon') {
         drawDunes(ctx, position); // Reuse dunes for canyon
-      } else if (biome === 'mountain_pass') {
+      } else if (trackTheme === 'mountain_pass') {
         drawMountains(ctx, position);
-      } else if (biome === 'urban_downtown') {
+      } else if (trackTheme === 'urban_downtown') {
         drawCityscape(ctx, position);
       } else {
         drawIndustrialZone(ctx, position);
@@ -1203,36 +1198,11 @@ export const RacingGame: React.FC<RacingGameProps> = ({
         // Draw Road
         drawPolygon(ctx, segment.p1.screen.x, segment.p1.screen.y, segment.p1.screen.w, segment.p2.screen.x, segment.p2.screen.y, segment.p2.screen.w, segment.colors.road, true);
 
-        // Road Grid Pattern (939PRO Style)
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-        ctx.lineWidth = 1;
-        const lanes = 3;
-        for (let i = 1; i < lanes; i++) {
-          const l1 = segment.p1.screen.w / lanes;
-          const l2 = segment.p2.screen.w / lanes;
-          const lx1 = segment.p1.screen.x - segment.p1.screen.w + (l1 * i * 2);
-          const lx2 = segment.p2.screen.x - segment.p2.screen.w + (l2 * i * 2);
-          ctx.beginPath();
-          ctx.moveTo(lx1, segment.p1.screen.y);
-          ctx.lineTo(lx2, segment.p2.screen.y);
-          ctx.stroke();
-        }
-
-        // Road Reflections (Rain)
-        if (weather === 'rain') {
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-          ctx.fillRect(segment.p2.screen.x - segment.p2.screen.w, segment.p2.screen.y, segment.p2.screen.w * 2, segment.p1.screen.y - segment.p2.screen.y);
-        }
-
         // Rumble
         const r1 = segment.p1.screen.w / 10;
         const r2 = segment.p2.screen.w / 10;
-        // 939PRO Neon Rumble
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = segment.colors.rumble;
         drawPolygon(ctx, segment.p1.screen.x - segment.p1.screen.w - r1, segment.p1.screen.y, r1, segment.p2.screen.x - segment.p2.screen.w - r2, segment.p2.screen.y, r2, segment.colors.rumble);
         drawPolygon(ctx, segment.p1.screen.x + segment.p1.screen.w + r1, segment.p1.screen.y, r1, segment.p2.screen.x + segment.p2.screen.w + r2, segment.p2.screen.y, r2, segment.colors.rumble);
-        ctx.shadowBlur = 0;
 
         // Lanes
         if (segment.colors.lane) {
@@ -1265,7 +1235,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
           const spriteH = spriteW * 1.5;
           
           if (sprite.source === 'tree') {
-            if (biome === 'coastal_highway') drawPalmTree(ctx, spriteX, spriteY, spriteW, spriteH);
+            if (trackTheme === 'coastal_highway') drawPalmTree(ctx, spriteX, spriteY, spriteW, spriteH);
             else drawTree(ctx, spriteX, spriteY, spriteW, spriteH);
           }
           else if (sprite.source === 'pine') drawPine(ctx, spriteX, spriteY, spriteW, spriteH);
@@ -1294,7 +1264,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
               tires: 1,
               turbo: 1
             };
-            drawCar(ctx, oppX, oppY, oppW, oppH, oppConfig, true, 0, opp.visualAngle || 0, false, opp.speed);
+            drawCar(ctx, oppX, oppY, oppW, oppH, oppConfig, true, 0, opp.visualAngle || 0, false);
 
             // Siren Effect
             if (opp.isPolice) {
@@ -1318,29 +1288,17 @@ export const RacingGame: React.FC<RacingGameProps> = ({
       // Render Player Car (Rear View)
       const isBraking = keysRef.current['ArrowDown'] || keysRef.current['KeyS'];
 
-      // Road Reflection (Neon Bloom from Buildings)
-      if (biome === 'neon_city' || biome === 'urban_downtown') {
-        const playerSegment = findSegment(position + playerZ);
-        if (playerSegment.sprites.some(s => s.source === 'building' || s.source === 'lamp')) {
-          const reflectionGrad = ctx.createRadialGradient(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 300);
-          reflectionGrad.addColorStop(0, 'rgba(0, 255, 255, 0.05)');
-          reflectionGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          ctx.fillStyle = reflectionGrad;
-          ctx.fillRect(0, SCREEN_HEIGHT - 150, SCREEN_WIDTH, 150);
-        }
-      }
-
       // Slipstream Screen Effect
-      if (isSlipstreaming || turboActive) {
-        ctx.strokeStyle = turboActive ? 'rgba(0, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.15)';
-        ctx.lineWidth = turboActive ? 3 : 2;
-        for (let i = 0; i < 15; i++) {
+      if (isSlipstreaming) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 10; i++) {
           const side = i % 2 === 0 ? 1 : -1;
-          const lineX = SCREEN_WIDTH / 2 + (side * (150 + Math.random() * 300));
+          const lineX = SCREEN_WIDTH / 2 + (side * (200 + Math.random() * 200));
           const lineY = Math.random() * SCREEN_HEIGHT;
           ctx.beginPath();
           ctx.moveTo(lineX, lineY);
-          ctx.lineTo(lineX + (Math.random() - 0.5) * 30, lineY + 100 + Math.random() * 200);
+          ctx.lineTo(lineX + (Math.random() - 0.5) * 20, lineY + 50 + Math.random() * 100);
           ctx.stroke();
         }
       }
@@ -1365,52 +1323,23 @@ export const RacingGame: React.FC<RacingGameProps> = ({
       sparkParticles.forEach(p => {
         ctx.fillStyle = p.color;
         ctx.globalAlpha = Math.max(0, p.life);
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = p.color;
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y);
-        ctx.lineTo(p.x - 10, p.y + 5);
-        ctx.lineTo(p.x - 5, p.y);
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        ctx.fillRect(p.x, p.y, p.size, p.size);
       });
 
       ctx.globalAlpha = 1.0;
 
-      drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 180, 110, carConfig, isBraking, damage, driftAngle, turboActive, speed);
+      drawCar(ctx, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 60, 180, 110, carConfig, isBraking, damage, driftAngle, turboActive);
 
       // Rain Rendering
       if (weather === 'rain') {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.lineWidth = 1;
         rainParticles.forEach(p => {
           ctx.beginPath();
           ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x + (speed / maxSpeed) * 5, p.y + p.length);
+          ctx.lineTo(p.x + (speed / maxSpeed) * 2, p.y + p.length);
           ctx.stroke();
         });
-        
-        // Lens droplets
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-        for (let i = 0; i < 5; i++) {
-          ctx.beginPath();
-          ctx.arc(Math.random() * SCREEN_WIDTH, Math.random() * SCREEN_HEIGHT, 1 + Math.random() * 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-
-      // Fog Rendering
-      if (weather === 'fog') {
-        const fogGrad = ctx.createLinearGradient(0, 0, 0, SCREEN_HEIGHT);
-        fogGrad.addColorStop(0, 'rgba(200, 200, 220, 0.8)');
-        fogGrad.addColorStop(0.5, 'rgba(200, 200, 220, 0.4)');
-        fogGrad.addColorStop(1, 'rgba(200, 200, 220, 0)');
-        ctx.fillStyle = fogGrad;
-        ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-        
-        // Background haze
-        ctx.fillStyle = 'rgba(200, 200, 220, 0.3)';
-        ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
       }
 
       // Vignette Effect
@@ -1462,7 +1391,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('deviceorientation', handleOrientation);
     };
-  }, [level, onRaceEnd, isReady, carConfig, aspectRatio, biome, weather, mode]);
+  }, [level, onRaceEnd, isReady, carConfig, aspectRatio, trackTheme, mode]);
 
   const handleStartRace = () => {
     audioManager.init();
@@ -1678,57 +1607,38 @@ export const RacingGame: React.FC<RacingGameProps> = ({
   };
 
   const drawBuilding = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
-    // Main Structure (High Contrast)
+    // Main Structure
     const bGrad = ctx.createLinearGradient(x - w/2, y - h, x + w/2, y);
-    bGrad.addColorStop(0, '#0a0a0a');
-    bGrad.addColorStop(1, '#000');
+    bGrad.addColorStop(0, '#1e293b');
+    bGrad.addColorStop(1, '#0f172a');
     ctx.fillStyle = bGrad;
     ctx.fillRect(x - w / 2, y - h, w, h);
 
-    // Neon Edge Highlight
-    ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x - w / 2, y - h, w, h);
+    // Stylized Windows
+    const winW = w / 6;
+    const winH = h / 10;
+    const spacingX = w / 4;
+    const spacingY = h / 7;
 
-    // Stylized Windows (Neon Grid)
-    const winW = w / 8;
-    const winH = h / 12;
-    const spacingX = w / 5;
-    const spacingY = h / 8;
-
-    for (let row = 0; row < 6; row++) {
-      for (let col = 0; col < 4; col++) {
-        const wx = x - w / 2 + 10 + col * spacingX;
-        const wy = y - h + 10 + row * spacingY;
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 3; col++) {
+        const wx = x - w / 2 + 12 + col * spacingX;
+        const wy = y - h + 12 + row * spacingY;
         
-        const isLit = Math.random() > 0.6;
+        const isLit = Math.random() > 0.7;
+        ctx.fillStyle = isLit ? '#fef08a' : '#334155';
         if (isLit) {
-          const color = Math.random() > 0.5 ? '#ff00ff' : '#00ffff';
-          ctx.fillStyle = color;
-          ctx.shadowBlur = 15;
-          ctx.shadowColor = color;
-          ctx.fillRect(wx, wy, winW, winH);
-          ctx.shadowBlur = 0;
-        } else {
-          ctx.fillStyle = '#111';
-          ctx.fillRect(wx, wy, winW, winH);
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#fef08a';
         }
+        ctx.fillRect(wx, wy, winW, winH);
+        ctx.shadowBlur = 0;
       }
     }
 
-    // Roof Detail (Antenna with blinking light)
-    ctx.fillStyle = '#222';
-    ctx.fillRect(x - 2, y - h - 30, 4, 30);
-    const flash = Math.floor(Date.now() / 500) % 2 === 0;
-    if (flash) {
-      ctx.fillStyle = '#ff0000';
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#ff0000';
-      ctx.beginPath();
-      ctx.arc(x, y - h - 35, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
+    // Roof Detail
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(x - w/2 - 5, y - h - 10, w + 10, 10);
   };
 
   const drawLamp = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
@@ -1749,26 +1659,13 @@ export const RacingGame: React.FC<RacingGameProps> = ({
     ctx.fill();
 
     // Light
-    const lightColor = biome === 'neon_city' ? '#00ffff' : '#fef08a';
-    ctx.fillStyle = lightColor;
-    ctx.shadowBlur = 30;
-    ctx.shadowColor = lightColor;
+    ctx.fillStyle = '#fef08a';
+    ctx.shadowBlur = 25;
+    ctx.shadowColor = '#fef08a';
     ctx.beginPath();
-    ctx.arc(x, y - h + 5, 10, 0, Math.PI * 2);
+    ctx.arc(x, y - h + 5, 8, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
-    
-    // Light Beam (Volumetric effect)
-    const beamGrad = ctx.createLinearGradient(x, y - h + 5, x, y);
-    beamGrad.addColorStop(0, hexToRgba(lightColor, 0.2));
-    beamGrad.addColorStop(1, 'transparent');
-    ctx.fillStyle = beamGrad;
-    ctx.beginPath();
-    ctx.moveTo(x - 20, y - h + 5);
-    ctx.lineTo(x + 20, y - h + 5);
-    ctx.lineTo(x + 60, y);
-    ctx.lineTo(x - 60, y);
-    ctx.fill();
   };
 
   const drawRock = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
@@ -1896,80 +1793,506 @@ export const RacingGame: React.FC<RacingGameProps> = ({
   };
 
   return (
-    <div className={`relative group w-full mx-auto bg-black overflow-hidden ${aspectRatio === '4:3' ? 'max-w-[800px] aspect-[4/3]' : 'max-w-[1066px] aspect-[16/9]'}`}>
+    <div className={`relative group w-full mx-auto ${aspectRatio === '4:3' ? 'max-w-[800px] aspect-[4/3]' : 'max-w-[1066px] aspect-[16/9]'}`}>
       <canvas
         ref={canvasRef}
         width={SCREEN_WIDTH}
         height={SCREEN_HEIGHT}
-        className="w-full h-full rounded-sm border-4 border-zinc-800 shadow-2xl"
+        className="w-full h-full rounded-sm border-4 border-zinc-800 shadow-2xl bg-black"
       />
       
-      {/* HUD Overlay */}
-      {isReady && (
-        <HUD 
-          hud={hud}
-          mode={mode}
-          isPaused={isPaused}
-          isMuted={isMuted}
-          useTilt={useTilt}
-          aspectRatio={aspectRatio}
-          isMobile={isMobile}
-          checkpointNotify={checkpointNotify}
-          togglePause={togglePause}
-          toggleMute={toggleMute}
-          toggleAspectRatio={toggleAspectRatio}
-          setUseTilt={setUseTilt}
-          keysRef={keysRef}
-        />
-      )}
+      {/* HUD Overlay - Matching Image Style */}
+      {isReady ? (
+        <div className="absolute inset-0 pointer-events-none p-6 text-white font-sans">
+          {/* Pause Overlay */}
+          {isPaused && (
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-md flex flex-col items-center justify-center z-50 pointer-events-auto">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="text-center space-y-8"
+              >
+                <h2 className="text-7xl font-black italic uppercase tracking-tighter text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.4)]">
+                  Paused
+                </h2>
+                <div className="flex flex-col gap-4 w-72 mx-auto">
+                  <button 
+                    onClick={togglePause}
+                    className="group relative bg-white text-black font-bold py-5 rounded-sm hover:bg-zinc-200 transition-all transform hover:skew-x-[-10deg] active:scale-95 uppercase tracking-widest text-lg"
+                  >
+                    Resume Race
+                    <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/20 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+                  </button>
+                  <button 
+                    onClick={onBack}
+                    className="group relative bg-zinc-900 text-white font-bold py-5 rounded-sm border border-zinc-700 hover:bg-zinc-800 transition-all transform hover:skew-x-[-10deg] active:scale-95 uppercase tracking-widest text-lg"
+                  >
+                    Return to Menu
+                    <div className="absolute -bottom-1 -right-1 w-full h-full border border-white/10 -z-10 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
 
-      {/* Menus */}
-      <PauseMenu 
-        isPaused={isPaused}
-        isMuted={isMuted}
-        togglePause={togglePause}
-        toggleMute={toggleMute}
-        resetGame={() => {
-          setIsReady(false);
-          setIsPaused(false);
-          handleStartRace();
-        }}
-        setGameState={setGameState}
-      />
+          <div className="flex justify-between items-start">
+            <div className="space-y-0 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
+              <div className="text-xs font-mono text-zinc-400 uppercase tracking-widest">Lap</div>
+              <div className="text-4xl font-black italic tracking-tighter">
+                {hud.lap}<span className="text-xl text-zinc-500 not-italic ml-1">/ {hud.totalLaps === 999 ? '∞' : hud.totalLaps}</span>
+              </div>
+              <div className="text-2xl font-black mt-2">Time: {hud.time.toFixed(2)}</div>
+              
+              {mode !== 'tokyo-expressway' && (
+                <div className={`text-3xl font-black mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] ${hud.checkpointTime < 10 ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
+                  TIME: {Math.ceil(hud.checkpointTime)}s
+                </div>
+              )}
+              
+              {/* Mini Map */}
+              <div className="mt-4 w-40 h-28 border-2 border-white/80 rounded-xl relative overflow-hidden bg-black/30 backdrop-blur-sm flex flex-col items-center justify-center p-2">
+                <div className="text-[8px] font-mono text-white/40 uppercase tracking-widest mb-1">Track Map</div>
+                <div className="w-32 h-16 border-2 border-white/10 rounded-full relative">
+                  {/* Player Dot */}
+                  <div 
+                    className="absolute w-3 h-3 bg-red-500 rounded-full shadow-[0_0_10px_red] z-20"
+                    style={{
+                      left: `${50 + 42 * Math.cos(hud.progress * Math.PI * 2 - Math.PI / 2)}%`,
+                      top: `${50 + 42 * Math.sin(hud.progress * Math.PI * 2 - Math.PI / 2)}%`,
+                      transform: 'translate(-50%, -50%)'
+                    }}
+                  />
+                  {/* Opponent Dots */}
+                  {hud.opponents.map((oppProgress, i) => (
+                    <div 
+                      key={i}
+                      className="absolute w-1.5 h-1.5 bg-blue-400 rounded-full opacity-60 z-10"
+                      style={{
+                        left: `${50 + 42 * Math.cos(oppProgress * Math.PI * 2 - Math.PI / 2)}%`,
+                        top: `${50 + 42 * Math.sin(oppProgress * Math.PI * 2 - Math.PI / 2)}%`,
+                        transform: 'translate(-50%, -50%)'
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
 
-      {gameState === 'menu' && !isReady && (
-        <PreRaceMenu 
-          mode={mode}
-          setMode={setMode}
-          biome={biome}
-          setBiome={setBiome}
-          weather={weather}
-          setWeather={setWeather}
-          onStart={handleStartRace}
-        />
-      )}
+            {/* Tokyo Expressway SP Meters */}
+            {mode === 'tokyo-expressway' && (
+              <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 w-[500px]">
+                <div className="flex justify-between w-full text-sm font-black italic uppercase tracking-widest text-white drop-shadow-md">
+                  <span className={hud.playerSP < 30 ? 'text-red-500 animate-pulse' : 'text-blue-400'}>Player SP: {Math.ceil(hud.playerSP)}</span>
+                  <span className="text-yellow-400">Distance: {Math.abs(Math.floor(hud.rivalDistance))}m</span>
+                  <span className={hud.rivalSP < 30 ? 'text-red-500 animate-pulse' : 'text-red-400'}>Rival SP: {Math.ceil(hud.rivalSP)}</span>
+                </div>
+                <div className="flex w-full h-6 bg-black/60 border-2 border-white/20 rounded-full overflow-hidden relative">
+                  {/* Player SP Bar (Left to Right) */}
+                  <div className="w-1/2 h-full border-r border-white/20 flex justify-end">
+                    <div 
+                      className="h-full bg-blue-500 transition-all duration-200"
+                      style={{ width: `${hud.playerSP}%` }}
+                    />
+                  </div>
+                  {/* Rival SP Bar (Left to Right) */}
+                  <div className="w-1/2 h-full">
+                    <div 
+                      className="h-full bg-red-500 transition-all duration-200"
+                      style={{ width: `${hud.rivalSP}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="text-[10px] font-mono text-white/60 uppercase tracking-widest mt-1 flex gap-4">
+                  <span>{hud.rivalDistance > 2000 ? 'Player Ahead - Draining Rival SP' : hud.rivalDistance < -2000 ? 'Rival Ahead - Draining Player SP' : 'Maintain Lead to Drain SP'}</span>
+                  {hud.bustTimer > 0 && (
+                    <span className="text-red-500 font-black animate-pulse">POLICE NEARBY! BUSTED IN: {(3 - hud.bustTimer).toFixed(1)}s</span>
+                  )}
+                </div>
+              </div>
+            )}
 
-      {gameState === 'customizing' && !isReady && (
-        <CustomizationMenu 
-          carConfig={carConfig}
-          setCarConfig={setCarConfig}
-          onStart={() => {
-            setGameState('racing');
-            handleStartRace();
-          }}
-          inventory={inventory}
-          setInventory={setInventory}
-        />
+            {/* Drift Score */}
+            {hud.driftScore > 0 && (
+              <div className="absolute top-32 left-1/2 -translate-x-1/2 text-center">
+                <motion.div
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="text-4xl font-black italic text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]"
+                >
+                  DRIFT: {Math.floor(hud.driftScore)}
+                </motion.div>
+              </div>
+            )}
+
+            {/* Leaderboard */}
+            <div className="absolute top-6 right-6 flex flex-col items-end gap-1">
+              {hud.leaderboard?.map((racer: any, i: number) => (
+                <div 
+                  key={racer.id}
+                  className={`flex items-center gap-3 px-3 py-1 rounded-sm border ${racer.isPlayer ? 'bg-white text-black border-white' : 'bg-black/40 text-white border-white/20'} transition-all w-32`}
+                >
+                  <span className="font-black italic text-sm">{i + 1}</span>
+                  <span className="font-mono text-[10px] uppercase tracking-tighter flex-1 truncate">{racer.name}</span>
+                  <span className="font-mono text-[9px] opacity-60">L{racer.lap}</span>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex items-center gap-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
+              <button 
+                onClick={() => setUseTilt(!useTilt)}
+                className={`p-2 border rounded-sm transition-all pointer-events-auto flex items-center gap-2 ${useTilt ? 'bg-cyan-500 border-cyan-400 text-white shadow-[0_0_10px_rgba(6,182,212,0.5)]' : 'bg-black/50 border-white/40 text-white/70 hover:bg-white/10'}`}
+                title="Toggle Tilt Controls"
+              >
+                <Monitor className={`w-5 h-5 ${useTilt ? 'animate-pulse' : ''}`} />
+                <span className="text-[10px] font-bold uppercase tracking-tighter">{useTilt ? 'Tilt On' : 'Tilt Off'}</span>
+              </button>
+
+              <button 
+                onClick={toggleAspectRatio}
+                className="p-2 bg-black/50 border border-white/40 rounded-sm hover:bg-white/10 transition-colors pointer-events-auto flex items-center gap-2"
+                title="Toggle Aspect Ratio"
+              >
+                <Monitor className="w-5 h-5" />
+                <span className="text-[10px] font-bold">{aspectRatio}</span>
+              </button>
+
+              <button 
+                onClick={togglePause}
+                className="p-2 bg-black/50 border border-white/40 rounded-sm hover:bg-white/10 transition-colors pointer-events-auto"
+              >
+                {isPaused ? <PlayIcon className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
+              </button>
+
+              <button 
+                onClick={toggleMute}
+                className="p-2 bg-black/50 border border-white/40 rounded-sm hover:bg-white/10 transition-colors pointer-events-auto"
+              >
+                {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+              </button>
+
+              <div className="flex flex-col items-end">
+                <span className={`text-xs font-bold uppercase tracking-widest ${hud.damage > 70 ? 'text-red-500 animate-pulse' : 'text-zinc-400'}`}>Damage</span>
+                <div className="w-32 h-2 bg-black/50 border border-white/40 mt-1">
+                  <div 
+                    className={`h-full transition-all duration-300 ${hud.damage > 70 ? 'bg-red-500' : hud.damage > 40 ? 'bg-orange-500' : 'bg-emerald-500'}`}
+                    style={{ width: `${hud.damage}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <span className={`text-2xl font-black uppercase italic tracking-tighter transition-colors ${hud.turbo >= 100 ? 'text-yellow-400 animate-pulse' : 'text-white'}`}>
+                  {hud.turbo >= 100 ? 'Turbo Ready' : 'Turbo'}
+                </span>
+                <div className="w-56 h-6 bg-black/50 border-2 border-white/80 p-0.5 relative">
+                  <div 
+                    className={`h-full transition-all duration-100 ${hud.turbo >= 100 ? 'bg-yellow-400 shadow-[0_0_15px_#facc15]' : 'bg-white shadow-[0_0_10px_white]'}`} 
+                    style={{ width: `${hud.turbo}%` }}
+                  ></div>
+                  {/* Charge Indicator */}
+                  {hud.turbo < 100 && (
+                    <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold uppercase tracking-tighter opacity-50">
+                      Hold Shift to Charge
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="absolute bottom-12 right-12 text-right drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">
+            {hud.slipstream && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: [0.4, 1, 0.4], scale: 1 }}
+                transition={{ repeat: Infinity, duration: 1 }}
+                className="text-blue-400 font-black italic text-2xl mb-2 tracking-tighter flex items-center justify-end gap-2"
+              >
+                <Zap className="w-6 h-6 fill-blue-400" />
+                SLIPSTREAMING
+              </motion.div>
+            )}
+            <div className="text-8xl font-black italic tracking-tighter">
+              {hud.speed}
+              <span className="text-2xl ml-3 not-italic font-bold opacity-90">MPH</span>
+            </div>
+            {hud.leaderboard && hud.leaderboard.length > 0 && (
+              <div className="text-6xl font-black italic tracking-tighter mt-2 text-emerald-400">
+                <span className="text-2xl not-italic font-bold opacity-90 mr-2">POS</span>
+                {hud.leaderboard.findIndex((r: any) => r.isPlayer) + 1}
+                <span className="text-2xl not-italic font-bold opacity-90 ml-1">/ {hud.leaderboard.length}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Mobile Controls */}
+          {isMobile && (
+            <div className="absolute inset-0 pointer-events-none touch-none">
+              {/* Left Side: Steering */}
+              <div className="absolute bottom-8 left-8 flex gap-4 pointer-events-auto">
+                <button
+                  onPointerDown={() => keysRef.current['ArrowLeft'] = true}
+                  onPointerUp={() => keysRef.current['ArrowLeft'] = false}
+                  onPointerLeave={() => keysRef.current['ArrowLeft'] = false}
+                  className="w-16 h-16 bg-white/10 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center active:bg-white/30 transition-colors"
+                >
+                  <ChevronLeft className="w-8 h-8" />
+                </button>
+                <button
+                  onPointerDown={() => keysRef.current['ArrowRight'] = true}
+                  onPointerUp={() => keysRef.current['ArrowRight'] = false}
+                  onPointerLeave={() => keysRef.current['ArrowRight'] = false}
+                  className="w-16 h-16 bg-white/10 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center active:bg-white/30 transition-colors"
+                >
+                  <ChevronRight className="w-8 h-8" />
+                </button>
+              </div>
+
+              {/* Right Side: Pedals & Turbo */}
+              <div className="absolute bottom-8 right-8 flex flex-col items-end gap-4 pointer-events-auto">
+                <div className="flex gap-4">
+                  <button
+                    onPointerDown={() => keysRef.current['ControlLeft'] = true}
+                    onPointerUp={() => keysRef.current['ControlLeft'] = false}
+                    onPointerLeave={() => keysRef.current['ControlLeft'] = false}
+                    className={`w-16 h-16 backdrop-blur-md border rounded-full flex items-center justify-center transition-all ${hud.turbo >= 100 ? 'bg-blue-500/40 border-blue-400 animate-pulse' : 'bg-white/10 border-white/20 opacity-50'}`}
+                  >
+                    <Zap className="w-8 h-8" />
+                  </button>
+                  <button
+                    onPointerDown={() => keysRef.current['ArrowDown'] = true}
+                    onPointerUp={() => keysRef.current['ArrowDown'] = false}
+                    onPointerLeave={() => keysRef.current['ArrowDown'] = false}
+                    className="w-16 h-16 bg-red-500/20 backdrop-blur-md border border-red-500/40 rounded-full flex items-center justify-center active:bg-red-500/40 transition-colors"
+                  >
+                    <ChevronDown className="w-8 h-8" />
+                  </button>
+                </div>
+                <button
+                  onPointerDown={() => keysRef.current['ArrowUp'] = true}
+                  onPointerUp={() => keysRef.current['ArrowUp'] = false}
+                  onPointerLeave={() => keysRef.current['ArrowUp'] = false}
+                  className="w-36 h-20 bg-emerald-500/20 backdrop-blur-md border border-emerald-500/40 rounded-2xl flex items-center justify-center active:bg-emerald-500/40 transition-colors"
+                >
+                  <ChevronUp className="w-10 h-10" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isPaused && (
+            <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center backdrop-blur-sm">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="text-center space-y-6"
+              >
+                <h2 className="text-6xl font-black italic tracking-tighter uppercase">Paused</h2>
+                <button
+                  onClick={togglePause}
+                  className="bg-white text-black font-bold py-3 px-12 rounded-sm hover:bg-zinc-200 transition-all transform hover:skew-x-[-10deg] uppercase"
+                >
+                  Resume
+                </button>
+              </motion.div>
+            </div>
+          )}
+          {checkpointNotify && (
+            <motion.div
+              initial={{ opacity: 0, y: 50, scale: 0.5 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            >
+              <div className="bg-yellow-400 text-black px-8 py-4 rounded-sm font-black italic text-4xl shadow-[0_0_30px_#facc15] transform skew-x-[-10deg]">
+                TIME EXTENDED! +30s
+              </div>
+            </motion.div>
+          )}
+          {hud.checkpointTime <= 0 && (
+            <div className="absolute inset-0 bg-red-900/40 flex items-center justify-center pointer-events-none">
+              <div className="text-white font-black italic text-6xl animate-pulse drop-shadow-2xl">
+                TIME OVER!
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-md flex items-center justify-end p-12">
+          <motion.div 
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="w-80 bg-zinc-900 border border-zinc-800 p-6 space-y-8 shadow-2xl"
+          >
+            <div className="space-y-1">
+              <h2 className="text-2xl font-black italic uppercase italic tracking-tighter">Customize</h2>
+              <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Build your machine</p>
+            </div>
+
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Settings</h3>
+                <button 
+                  onClick={toggleAspectRatio}
+                  className="flex items-center gap-2 px-3 py-1 bg-white/5 border border-white/10 rounded-sm hover:bg-white/10 transition-colors"
+                >
+                  <Monitor className="w-3 h-3 text-zinc-400" />
+                  <span className="text-[10px] font-mono uppercase tracking-tighter text-zinc-300">{aspectRatio}</span>
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Weather</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['clear', 'rain', 'fog'] as const).map(w => (
+                    <button
+                      key={w}
+                      onClick={() => setWeather(w)}
+                      className={`py-2 text-[10px] font-bold uppercase border transition-colors ${weather === w ? 'bg-white text-black border-white' : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500'}`}
+                    >
+                      {w}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Body Color</label>
+                <div className="flex gap-2">
+                  {['#4ade80', '#ef4444', '#3b82f6', '#facc15', '#ffffff', '#18181b'].map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setCarConfig(prev => ({ ...prev, color: c }))}
+                      className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${carConfig.color === c ? 'border-white scale-110' : 'border-transparent'}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Spoiler</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['none', 'small', 'large'] as const).map(s => (
+                    <button
+                      key={s}
+                      onClick={() => setCarConfig(prev => ({ ...prev, spoiler: s }))}
+                      className={`py-2 text-[10px] font-bold uppercase border transition-colors ${carConfig.spoiler === s ? 'bg-white text-black border-white' : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500'}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Decals</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['none', 'stripes', 'racing-number'] as const).map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setCarConfig(prev => ({ ...prev, decal: d }))}
+                      className={`py-2 text-[10px] font-bold uppercase border transition-colors ${carConfig.decal === d ? 'bg-white text-black border-white' : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500'}`}
+                    >
+                      {d.replace('-', ' ')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Rims</label>
+                <div className="flex gap-2">
+                  {['#ffffff', '#000000', '#facc15', '#ef4444'].map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setCarConfig(prev => ({ ...prev, rims: c }))}
+                      className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${carConfig.rims === c ? 'border-white scale-110' : 'border-transparent'}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-4 border-t border-zinc-800">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Performance Upgrades</h3>
+                
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold uppercase text-zinc-400">Engine Stage</label>
+                    <span className="text-[10px] font-mono text-emerald-500">S{carConfig.engine}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[1, 2, 3].map(lvl => (
+                      <button
+                        key={lvl}
+                        onClick={() => setCarConfig(prev => ({ ...prev, engine: lvl }))}
+                        className={`h-1 transition-colors ${carConfig.engine >= lvl ? 'bg-emerald-500' : 'bg-zinc-800'}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold uppercase text-zinc-400">Tire Compound</label>
+                    <span className="text-[10px] font-mono text-emerald-500">S{carConfig.tires}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[1, 2, 3].map(lvl => (
+                      <button
+                        key={lvl}
+                        onClick={() => setCarConfig(prev => ({ ...prev, tires: lvl }))}
+                        className={`h-1 transition-colors ${carConfig.tires >= lvl ? 'bg-emerald-500' : 'bg-zinc-800'}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold uppercase text-zinc-400">Turbo System</label>
+                    <span className="text-[10px] font-mono text-emerald-500">S{carConfig.turbo}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[1, 2, 3].map(lvl => (
+                      <button
+                        key={lvl}
+                        onClick={() => setCarConfig(prev => ({ ...prev, turbo: lvl }))}
+                        className={`h-1 transition-colors ${carConfig.turbo >= lvl ? 'bg-emerald-500' : 'bg-zinc-800'}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={onBack}
+                className="bg-zinc-800 text-zinc-400 font-black py-4 uppercase italic tracking-tighter hover:bg-zinc-700 transition-colors"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleStartRace}
+                className={`bg-white text-black font-black py-4 uppercase italic tracking-tighter hover:bg-zinc-200 transition-colors`}
+              >
+                Start Race
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
 
       {countdown !== null && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[100]">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
           <motion.div
             key={countdown}
-            initial={{ scale: 3, opacity: 0, rotate: -10 }}
-            animate={{ scale: 1, opacity: 1, rotate: 0 }}
-            exit={{ scale: 0.5, opacity: 0, rotate: 10 }}
-            className="text-[200px] font-black italic tracking-tighter text-white drop-shadow-[0_0_50px_rgba(255,255,255,0.5)]"
+            initial={{ scale: 2, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.5, opacity: 0 }}
+            className="text-9xl font-black italic tracking-tighter text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]"
           >
             {countdown}
           </motion.div>
