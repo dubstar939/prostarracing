@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { RacingGame, TrackThemeType } from './components/RacingGame';
 import { Trophy, Flag, Settings, Play, Info, Loader2, Map, ShoppingBag, ChevronRight, Gauge, Zap } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleGenAI } from '@google/genai';
 import { CarConfig, CAR_MODELS, CarModelType, RaceMode, Inventory } from './types';
 

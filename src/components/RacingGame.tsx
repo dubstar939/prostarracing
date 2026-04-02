@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { audioManager } from '../services/audioService';
 import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Zap, Monitor } from 'lucide-react';
 
@@ -202,7 +202,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({
   const isPausedRef = useRef(false);
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const tiltRef = useRef<number>(0);
-  const [useTilt, setUseTilt] = useState(false);
+  const [controlMode, setControlMode] = useState<'buttons' | 'joystick' | 'tilt'>('buttons');
+  const joystickRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
+  const [isDriftButtonPressed, setIsDriftButtonPressed] = useState(false);
   const cityscapeRef = useRef<any[]>([]);
   const [isMobile, setIsMobile] = useState(false);
   const [checkpointNotify, setCheckpointNotify] = useState(false);
@@ -710,18 +712,43 @@ export const RacingGame: React.FC<RacingGameProps> = ({
         setTimeout(() => setCheckpointNotify(false), 2000);
       }
 
-      const isBraking = keysRef.current['ArrowDown'] || keysRef.current['KeyS'];
-      const isAccelerating = keysRef.current['ArrowUp'] || keysRef.current['KeyW'];
-      const isSteering = keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] || 
-                         keysRef.current['ArrowRight'] || keysRef.current['KeyD'] || 
-                         (useTilt && Math.abs(tiltRef.current) > 0.1);
+      const isBraking = keysRef.current['ArrowDown'] || keysRef.current['KeyS'] || (isMobile && isDriftButtonPressed);
+      const isAccelerating = keysRef.current['ArrowUp'] || keysRef.current['KeyW'] || (isMobile && controlMode !== 'tilt'); // Auto-accel on mobile buttons/joystick for flow
       
-      // Enhanced Tire Physics
+      let steeringInput = (keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] ? -1 : 0) + 
+                          (keysRef.current['ArrowRight'] || keysRef.current['KeyD'] ? 1 : 0);
+
+      if (isMobile) {
+        if (controlMode === 'tilt') {
+          steeringInput = tiltRef.current;
+        } else if (controlMode === 'joystick') {
+          steeringInput = joystickRef.current.x;
+        }
+      }
+      
+      const isSteering = Math.abs(steeringInput) > 0.1;
+      
+      // Enhanced Tire Physics for Mobile
       const baseGrip = (weather === 'rain' ? 0.55 : 0.9) + (tireGrip / 150);
+      
+      // Speed-sensitive steering: Lower sensitivity at low speeds, higher at high speeds
+      // But for mobile, we want it predictable. Let's use the requested principle:
+      // "Lower the steering sensitivity at low speeds; increase it gradually at higher speeds."
+      const steeringSensitivity = 0.5 + (speedPercent * 1.5);
+      const effectiveSteering = steeringInput * steeringSensitivity;
+
       const speedFactor = Math.max(0, 1 - (speed / maxSpeed) * 0.4);
       const grip = baseGrip * speedFactor;
       
       const isDrifting = isBraking && isSteering && speed > maxSpeed * 0.15;
+
+      // Drift Stabilization for Mobile
+      if (isDrifting && isMobile) {
+        // Automatically help stabilize the drift angle
+        const stabilizationForce = 0.05;
+        if (driftAngle > 0.4) driftAngle -= stabilizationForce;
+        if (driftAngle < -0.4) driftAngle += stabilizationForce;
+      }
 
       // Drift Scoring
       if (isDrifting) {
@@ -781,11 +808,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
 
       speed *= driftSlowdown;
 
-      const steeringInput = (keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] ? -1 : 0) + 
-                            (keysRef.current['ArrowRight'] || keysRef.current['KeyD'] ? 1 : 0) + 
-                            (useTilt ? tiltRef.current : 0);
-
-      playerX += steeringInput * dt * currentHandling * driftFactor * speedPercent;
+      playerX += effectiveSteering * dt * currentHandling * driftFactor * speedPercent;
 
       if ((playerX < -1) || (playerX > 1)) {
         if (speed > offRoadLimit) speed += offRoadDecel * dt;
@@ -920,6 +943,27 @@ export const RacingGame: React.FC<RacingGameProps> = ({
           } else if (zDiff < -2000) {
             // Rival is far behind, speed up
             targetSpeed *= 1.15;
+          }
+        }
+
+        // Mobile Rubberbanding: AI adjusts to player performance
+        if (isMobile) {
+          if (zDiff > 1500) {
+            // AI is ahead, slow down to let player catch up
+            targetSpeed *= 0.85;
+          } else if (zDiff < -3000) {
+            // AI is far behind, speed up to challenge player
+            targetSpeed *= 1.2;
+          }
+          
+          // Adjust based on player mistakes (damage)
+          if (damage > 50) {
+            targetSpeed *= 0.9;
+          }
+          
+          // Adjust based on player boost
+          if (turboActive) {
+            targetSpeed *= 1.1;
           }
         }
 
@@ -1388,7 +1432,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
     };
 
     const handleOrientation = (e: DeviceOrientationEvent) => {
-      if (useTilt && e.gamma !== null) {
+      if (isMobile && controlMode === 'tilt' && e.gamma !== null) {
         // Normalize gamma (-90 to 90) to -1 to 1
         tiltRef.current = Math.max(-1, Math.min(1, e.gamma / 45));
       }
@@ -1407,7 +1451,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('deviceorientation', handleOrientation);
     };
-  }, [level, onRaceEnd, isReady, carConfig, aspectRatio, trackTheme, mode]);
+  }, [level, onRaceEnd, isReady, carConfig, aspectRatio, trackTheme, mode, controlMode]);
 
   const handleStartRace = () => {
     audioManager.init();
@@ -1955,14 +1999,20 @@ export const RacingGame: React.FC<RacingGameProps> = ({
             </div>
             
             <div className="flex items-center gap-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
-              <button 
-                onClick={() => setUseTilt(!useTilt)}
-                className={`p-2 border rounded-sm transition-all pointer-events-auto flex items-center gap-2 ${useTilt ? 'bg-cyan-500 border-cyan-400 text-white shadow-[0_0_10px_rgba(6,182,212,0.5)]' : 'bg-black/50 border-white/40 text-white/70 hover:bg-white/10'}`}
-                title="Toggle Tilt Controls"
-              >
-                <Monitor className={`w-5 h-5 ${useTilt ? 'animate-pulse' : ''}`} />
-                <span className="text-[10px] font-bold uppercase tracking-tighter">{useTilt ? 'Tilt On' : 'Tilt Off'}</span>
-              </button>
+              {isMobile && (
+                <button 
+                  onClick={() => {
+                    const modes: ('buttons' | 'joystick' | 'tilt')[] = ['buttons', 'joystick', 'tilt'];
+                    const nextIndex = (modes.indexOf(controlMode) + 1) % modes.length;
+                    setControlMode(modes[nextIndex]);
+                  }}
+                  className={`p-2 border rounded-sm transition-all pointer-events-auto flex items-center gap-2 bg-black/50 border-white/40 text-white/70 hover:bg-white/10`}
+                  title="Cycle Control Mode"
+                >
+                  <Monitor className={`w-5 h-5 ${controlMode === 'tilt' ? 'animate-pulse' : ''}`} />
+                  <span className="text-[10px] font-bold uppercase tracking-tighter">{controlMode}</span>
+                </button>
+              )}
 
               <button 
                 onClick={toggleAspectRatio}
@@ -2042,57 +2092,128 @@ export const RacingGame: React.FC<RacingGameProps> = ({
             )}
           </div>
 
-          {/* Mobile Controls */}
+          {/* Mobile Controls Overlay */}
           {isMobile && (
-            <div className="absolute inset-0 pointer-events-none touch-none">
-              {/* Left Side: Steering */}
-              <div className="absolute bottom-8 left-8 flex gap-4 pointer-events-auto">
-                <button
-                  onPointerDown={() => keysRef.current['ArrowLeft'] = true}
-                  onPointerUp={() => keysRef.current['ArrowLeft'] = false}
-                  onPointerLeave={() => keysRef.current['ArrowLeft'] = false}
-                  className="w-16 h-16 bg-white/10 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center active:bg-white/30 transition-colors"
-                >
-                  <ChevronLeft className="w-8 h-8" />
-                </button>
-                <button
-                  onPointerDown={() => keysRef.current['ArrowRight'] = true}
-                  onPointerUp={() => keysRef.current['ArrowRight'] = false}
-                  onPointerLeave={() => keysRef.current['ArrowRight'] = false}
-                  className="w-16 h-16 bg-white/10 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center active:bg-white/30 transition-colors"
-                >
-                  <ChevronRight className="w-8 h-8" />
-                </button>
+            <div className="absolute inset-0 pointer-events-none select-none">
+              {/* Control Mode Toggle */}
+              <div className="absolute top-24 left-6 flex gap-2 pointer-events-auto">
+                {(['buttons', 'joystick', 'tilt'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setControlMode(mode)}
+                    className={`px-3 py-1 text-[10px] font-bold uppercase border rounded-sm transition-all ${controlMode === mode ? 'bg-cyan-500 border-cyan-400 text-white shadow-[0_0_10px_cyan]' : 'bg-black/40 border-white/20 text-white/60'}`}
+                  >
+                    {mode}
+                  </button>
+                ))}
               </div>
 
-              {/* Right Side: Pedals & Turbo */}
-              <div className="absolute bottom-8 right-8 flex flex-col items-end gap-4 pointer-events-auto">
-                <div className="flex gap-4">
+              {/* Drift Indicator (Neon Arc) */}
+              {hud.driftScore > 0 && (
+                <div className="absolute bottom-40 left-1/2 -translate-x-1/2 w-48 h-12 pointer-events-none">
+                  <div className="w-full h-full border-t-4 border-cyan-400/50 rounded-[100%] shadow-[0_-5px_15px_cyan] animate-pulse"></div>
+                  <div className="text-center text-[10px] font-black italic text-cyan-400 tracking-widest mt-2 uppercase">Drifting</div>
+                </div>
+              )}
+
+              {/* Left Side: Steering / Joystick */}
+              <div className="absolute bottom-12 left-12 w-48 h-48 flex items-center justify-center">
+                {controlMode === 'buttons' && (
+                  <div className="flex gap-6 pointer-events-auto">
+                    <button
+                      onPointerDown={() => keysRef.current['ArrowLeft'] = true}
+                      onPointerUp={() => keysRef.current['ArrowLeft'] = false}
+                      onPointerLeave={() => keysRef.current['ArrowLeft'] = false}
+                      className="w-24 h-24 bg-white/5 backdrop-blur-xl border-2 border-white/20 rounded-2xl flex items-center justify-center active:bg-cyan-500/40 active:border-cyan-400 transition-all active:scale-95 shadow-2xl"
+                    >
+                      <ChevronLeft className="w-12 h-12 text-white" />
+                    </button>
+                    <button
+                      onPointerDown={() => keysRef.current['ArrowRight'] = true}
+                      onPointerUp={() => keysRef.current['ArrowRight'] = false}
+                      onPointerLeave={() => keysRef.current['ArrowRight'] = false}
+                      className="w-24 h-24 bg-white/5 backdrop-blur-xl border-2 border-white/20 rounded-2xl flex items-center justify-center active:bg-cyan-500/40 active:border-cyan-400 transition-all active:scale-95 shadow-2xl"
+                    >
+                      <ChevronRight className="w-12 h-12 text-white" />
+                    </button>
+                  </div>
+                )}
+
+                {controlMode === 'joystick' && (
+                  <div 
+                    className="w-40 h-40 bg-white/5 backdrop-blur-xl border-2 border-white/10 rounded-full relative pointer-events-auto"
+                    onPointerMove={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const x = (e.clientX - rect.left - rect.width / 2) / (rect.width / 2);
+                      const y = (e.clientY - rect.top - rect.height / 2) / (rect.height / 2);
+                      joystickRef.current = { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)) };
+                    }}
+                    onPointerLeave={() => joystickRef.current = { x: 0, y: 0 }}
+                    onPointerUp={() => joystickRef.current = { x: 0, y: 0 }}
+                  >
+                    <motion.div 
+                      animate={{ x: joystickRef.current.x * 40, y: joystickRef.current.y * 40 }}
+                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-cyan-500 border-2 border-cyan-300 rounded-full shadow-[0_0_20px_cyan]"
+                    />
+                  </div>
+                )}
+
+                {controlMode === 'tilt' && (
+                  <div className="text-center">
+                    <div className="w-32 h-32 border-4 border-dashed border-white/20 rounded-full flex items-center justify-center animate-spin-slow">
+                      <Monitor className="w-12 h-12 text-white/40" />
+                    </div>
+                    <div className="text-[10px] font-black italic text-white/40 uppercase tracking-widest mt-4">Tilt to Steer</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Side: Drift & Boost */}
+              <div className="absolute bottom-12 right-12 flex flex-col items-end gap-8 pointer-events-auto">
+                <div className="flex gap-6">
+                  {/* Boost Button */}
                   <button
-                    onPointerDown={() => keysRef.current['ControlLeft'] = true}
+                    onPointerDown={() => {
+                      keysRef.current['ControlLeft'] = true;
+                      if (navigator.vibrate) navigator.vibrate(50);
+                    }}
                     onPointerUp={() => keysRef.current['ControlLeft'] = false}
                     onPointerLeave={() => keysRef.current['ControlLeft'] = false}
-                    className={`w-16 h-16 backdrop-blur-md border rounded-full flex items-center justify-center transition-all ${hud.turbo >= 100 ? 'bg-blue-500/40 border-blue-400 animate-pulse' : 'bg-white/10 border-white/20 opacity-50'}`}
+                    className={`w-28 h-28 backdrop-blur-xl border-2 rounded-3xl flex flex-col items-center justify-center transition-all active:scale-90 shadow-2xl ${hud.turbo >= 100 ? 'bg-blue-500/40 border-blue-400 animate-pulse' : 'bg-white/5 border-white/10 opacity-40'}`}
                   >
-                    <Zap className="w-8 h-8" />
+                    <Zap className={`w-12 h-12 ${hud.turbo >= 100 ? 'text-blue-300 fill-blue-300' : 'text-white'}`} />
+                    <span className="text-[10px] font-black italic uppercase tracking-widest mt-1">Boost</span>
                   </button>
+
+                  {/* Drift / Brake Button */}
                   <button
-                    onPointerDown={() => keysRef.current['ArrowDown'] = true}
-                    onPointerUp={() => keysRef.current['ArrowDown'] = false}
-                    onPointerLeave={() => keysRef.current['ArrowDown'] = false}
-                    className="w-16 h-16 bg-red-500/20 backdrop-blur-md border border-red-500/40 rounded-full flex items-center justify-center active:bg-red-500/40 transition-colors"
+                    onPointerDown={() => {
+                      setIsDriftButtonPressed(true);
+                      if (navigator.vibrate) navigator.vibrate(20);
+                    }}
+                    onPointerUp={() => setIsDriftButtonPressed(false)}
+                    onPointerLeave={() => setIsDriftButtonPressed(false)}
+                    className={`w-28 h-28 backdrop-blur-xl border-2 rounded-3xl flex flex-col items-center justify-center transition-all active:scale-90 shadow-2xl ${isDriftButtonPressed ? 'bg-red-500/40 border-red-400' : 'bg-white/5 border-white/10'}`}
                   >
-                    <ChevronDown className="w-8 h-8" />
+                    <div className="w-12 h-12 border-4 border-white/40 rounded-full flex items-center justify-center">
+                      <div className="w-6 h-6 bg-white/40 rounded-full"></div>
+                    </div>
+                    <span className="text-[10px] font-black italic uppercase tracking-widest mt-1">Drift</span>
                   </button>
                 </div>
-                <button
-                  onPointerDown={() => keysRef.current['ArrowUp'] = true}
-                  onPointerUp={() => keysRef.current['ArrowUp'] = false}
-                  onPointerLeave={() => keysRef.current['ArrowUp'] = false}
-                  className="w-36 h-20 bg-emerald-500/20 backdrop-blur-md border border-emerald-500/40 rounded-2xl flex items-center justify-center active:bg-emerald-500/40 transition-colors"
-                >
-                  <ChevronUp className="w-10 h-10" />
-                </button>
+
+                {/* Acceleration (Only visible in tilt mode, otherwise auto-accel) */}
+                {controlMode === 'tilt' && (
+                  <button
+                    onPointerDown={() => keysRef.current['ArrowUp'] = true}
+                    onPointerUp={() => keysRef.current['ArrowUp'] = false}
+                    onPointerLeave={() => keysRef.current['ArrowUp'] = false}
+                    className="w-60 h-24 bg-emerald-500/20 backdrop-blur-xl border-2 border-emerald-500/40 rounded-2xl flex items-center justify-center active:bg-emerald-500/40 transition-all active:scale-95 shadow-2xl"
+                  >
+                    <ChevronUp className="w-12 h-12 text-white" />
+                    <span className="text-xl font-black italic uppercase tracking-widest ml-2">Accelerate</span>
+                  </button>
+                )}
               </div>
             </div>
           )}
