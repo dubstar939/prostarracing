@@ -18,18 +18,18 @@ export const shadeColor = (color: string, percent: number) => {
 
 const drawUnderglow = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, color: string) => {
   ctx.save();
-  // Grounded shadow (Darker core)
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  // Hover shadow (Higher offset for anti-gravity feel)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
   ctx.beginPath();
-  ctx.ellipse(x, y + 2, w * 0.5, 10, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + 15, w * 0.4, 8, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Neon Glow
-  ctx.shadowBlur = 40;
+  // Anti-Gravity Repulsion Glow
+  ctx.shadowBlur = 50;
   ctx.shadowColor = color;
-  ctx.fillStyle = hexToRgba(color, 0.6);
+  ctx.fillStyle = hexToRgba(color, 0.4);
   ctx.beginPath();
-  ctx.ellipse(x, y, w * 0.6, 15, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + 10, w * 0.7, 20, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 };
@@ -41,54 +41,41 @@ const hexToRgba = (hex: string, alpha: number) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-const drawTires = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig) => {
-  const tireWidth = (w * 0.2 + (config.tires * 2)) * (config.model === 'tank' ? 1.5 : (config.model === 'drifter' ? 1.2 : 1.1));
-  const tireHeight = h * 0.35;
-  const tireY = y - h * 0.15;
+const drawThrusters = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, config: CarConfig) => {
+  const podWidth = (w * 0.15) * (config.model === 'tank' ? 1.4 : 1.1);
+  const podHeight = h * 0.25;
+  const podY = y - h * 0.1;
 
-const drawWheel = (wx: number, wy: number) => {
-    // Tire
-    ctx.fillStyle = '#0a0a0a';
+  const drawPod = (px: number, py: number) => {
+    // Thruster Housing
+    ctx.fillStyle = '#1a1a1a';
     ctx.beginPath();
-    ctx.roundRect(wx - tireWidth / 2, wy - tireHeight / 2, tireWidth, tireHeight, 4);
+    ctx.roundRect(px - podWidth / 2, py - podHeight / 2, podWidth, podHeight, 2);
     ctx.fill();
 
-    // Rim Glow
-    ctx.strokeStyle = config.color;
-    ctx.lineWidth = 2;
-    ctx.shadowBlur = 10;
+    // Energy Core Glow
+    ctx.fillStyle = config.color;
+    ctx.shadowBlur = 15;
     ctx.shadowColor = config.color;
-    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(px, py, podWidth * 0.3, 0, Math.PI * 2);
+    ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Rim
-    const rimSize = tireWidth * 0.6;
-    const rimGrad = ctx.createRadialGradient(wx, wy, 0, wx, wy, rimSize / 2);
-    rimGrad.addColorStop(0, '#333');
-    rimGrad.addColorStop(1, '#000');
-    ctx.fillStyle = rimGrad;
-    ctx.beginPath();
-    ctx.arc(wx, wy, rimSize / 2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Spokes (Neon)
-    ctx.strokeStyle = config.color;
+    // Containment Rings
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
     ctx.lineWidth = 1;
-    for (let i = 0; i < 6; i++) {
-      const angle = (i * Math.PI * 2) / 6;
-      ctx.beginPath();
-      ctx.moveTo(wx, wy);
-      ctx.lineTo(wx + Math.cos(angle) * rimSize / 2.2, wy + Math.sin(angle) * rimSize / 2.2);
-      ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.arc(px, py, podWidth * 0.4, 0, Math.PI * 2);
+    ctx.stroke();
   };
 
-  drawWheel(x - w * 0.4, tireY);
-  drawWheel(x + w * 0.4, tireY);
+  drawPod(x - w * 0.35, podY);
+  drawPod(x + w * 0.35, podY);
   
   if (config.model === 'tank') {
-    drawWheel(x - w * 0.4, tireY - tireHeight * 0.8);
-    drawWheel(x + w * 0.4, tireY - tireHeight * 0.8);
+    drawPod(x - w * 0.35, podY - podHeight * 1.2);
+    drawPod(x + w * 0.35, podY - podHeight * 1.2);
   }
 };
 
@@ -575,7 +562,7 @@ export const drawCar = (
     drawUnderglow(ctx, x, y, currentW, config.color);
   }
 
-  drawTires(ctx, x, y, currentW, h, config);
+  drawThrusters(ctx, x, y, currentW, h, config);
   drawSpoiler(ctx, x, y, currentW, h, config);
   drawMainBody(ctx, x, y, currentW, h, config, damage, driftAngle);
   

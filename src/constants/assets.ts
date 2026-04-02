@@ -37,8 +37,8 @@ export const TRACK_TILESET = {
 export const BIOMES = {
   NEON_CITY: {
     id: "neon_city",
-    name: "Neon City Night",
-    mood: "Electric, Dense, Vibrant",
+    name: "Neon Orbital Ring",
+    mood: "Electric, Cosmic, Vibrant",
     palette: {
       road: "#1a1a2e",
       neon: "#ff00ff", // Magenta
@@ -56,8 +56,8 @@ export const BIOMES = {
   },
   COASTAL_HIGHWAY: {
     id: "coastal_highway",
-    name: "Coastal Highway Sunset",
-    mood: "Warm, Breezy, Nostalgic",
+    name: "Solar Flare Coast",
+    mood: "Warm, Radiating, Nostalgic",
     palette: {
       road: "#2c3e50",
       neon: "#f39c12", // Orange
@@ -75,7 +75,7 @@ export const BIOMES = {
   },
   DESERT_CANYON: {
     id: "desert_canyon",
-    name: "Desert Canyon Heatwave",
+    name: "Asteroid Belt Canyon",
     mood: "Harsh, Dusty, Vast",
     palette: {
       road: "#3e2723",
@@ -94,7 +94,7 @@ export const BIOMES = {
   },
   CYBER_INDUSTRIAL: {
     id: "cyber_industrial",
-    name: "Cyber-Industrial Zone",
+    name: "Star Forge Zone",
     mood: "Gritty, Heavy, Mechanical",
     palette: {
       road: "#212121",
@@ -113,7 +113,7 @@ export const BIOMES = {
   },
   MOUNTAIN_PASS: {
     id: "mountain_pass",
-    name: "Mountain Pass",
+    name: "Ice Ring Pass",
     mood: "Cool, Rocky, Pine-scented",
     palette: {
       road: "#334155",
@@ -132,7 +132,7 @@ export const BIOMES = {
   },
   URBAN_DOWNTOWN: {
     id: "urban_downtown",
-    name: "Urban Downtown",
+    name: "Galactic Hub Hub",
     mood: "Realistic, Reflective, Busy",
     palette: {
       road: "#1e293b",

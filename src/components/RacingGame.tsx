@@ -50,6 +50,8 @@ const CAMERA_HEIGHT = 1000;
 const CAMERA_DEPTH = 1 / Math.tan((FIELD_OF_VIEW / 2) * Math.PI / 180);
 const DRAW_DISTANCE = 300;
 const SCREEN_HEIGHT = 600;
+const BASE_SPEED_SCALE = 3.5; // Increased for anti-gravity feel
+const KMH_CONVERSION = 1.609; // For display scaling
 
 /**
  * Represents a point in 3D space and its 2D projection.
@@ -1159,7 +1161,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
 
       setHud(prev => ({
         ...prev,
-        speed: Math.floor(speed / 100),
+        speed: Math.floor((speed / 100) * BASE_SPEED_SCALE),
         time: (Date.now() - startTime) / 1000,
         lap: Math.min(totalLaps, lap),
         position: playerRank,
@@ -1965,7 +1967,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
                 <div className="text-[10px] font-mono text-white/60 uppercase tracking-widest mt-1 flex gap-4">
                   <span>{hud.rivalDistance > 2000 ? 'Player Ahead - Draining Rival SP' : hud.rivalDistance < -2000 ? 'Rival Ahead - Draining Player SP' : 'Maintain Lead to Drain SP'}</span>
                   {hud.bustTimer > 0 && (
-                    <span className="text-red-500 font-black animate-pulse">POLICE NEARBY! BUSTED IN: {(3 - hud.bustTimer).toFixed(1)}s</span>
+                    <span className="text-red-500 font-black animate-pulse">ORBITAL PATROL NEARBY! INTERCEPTED IN: {(3 - hud.bustTimer).toFixed(1)}s</span>
                   )}
                 </div>
               </div>
@@ -2081,7 +2083,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
             )}
             <div className="text-8xl font-black italic tracking-tighter">
               {hud.speed}
-              <span className="text-2xl ml-3 not-italic font-bold opacity-90">MPH</span>
+              <span className="text-2xl ml-3 not-italic font-bold opacity-90">KM/H</span>
             </div>
             {hud.leaderboard && hud.leaderboard.length > 0 && (
               <div className="text-6xl font-black italic tracking-tighter mt-2 text-emerald-400">
