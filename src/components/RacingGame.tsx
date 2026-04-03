@@ -18,7 +18,12 @@ export type TrackThemeType =
   | 'desert_canyon' 
   | 'cyber_industrial' 
   | 'mountain_pass' 
-  | 'urban_downtown';
+  | 'urban_downtown'
+  | 'neon_grid'
+  | 'midnight_apex'
+  | 'palmline_circuit'
+  | 'storm_sector'
+  | 'velocity_ring';
 
 /**
  * Props for the RacingGame component.
@@ -470,8 +475,61 @@ export const RacingGame: React.FC<RacingGameProps> = ({
           altRoad: shadeColor(BIOMES.URBAN_DOWNTOWN.palette.road, 10), 
           altGrass: BIOMES.URBAN_DOWNTOWN.palette.env[1], 
           altRumble: '#000' 
+        },
+        neon_grid: { 
+          road: '#000', 
+          grass: '#111', 
+          rumble: '#ff00ff', 
+          lane: '#00ffff', 
+          altRoad: '#050505', 
+          altGrass: '#151515', 
+          altRumble: '#000' 
+        },
+        midnight_apex: { 
+          road: '#111', 
+          grass: '#000', 
+          rumble: '#3b82f6', 
+          lane: '#fff', 
+          altRoad: '#1a1a1a', 
+          altGrass: '#050505', 
+          altRumble: '#000' 
+        },
+        palmline_circuit: { 
+          road: '#334155', 
+          grass: '#059669', 
+          rumble: '#fbbf24', 
+          lane: '#fff', 
+          altRoad: '#1e293b', 
+          altGrass: '#10b981', 
+          altRumble: '#000' 
+        },
+        storm_sector: { 
+          road: '#0f172a', 
+          grass: '#1e293b', 
+          rumble: '#94a3b8', 
+          lane: '#cbd5e0', 
+          altRoad: '#1e293b', 
+          altGrass: '#334155', 
+          altRumble: '#000' 
+        },
+        velocity_ring: { 
+          road: '#1e293b', 
+          grass: '#334155', 
+          rumble: '#ef4444', 
+          lane: '#fff', 
+          altRoad: '#0f172a', 
+          altGrass: '#1e293b', 
+          altRumble: '#000' 
         }
-      }[trackTheme];
+      }[trackTheme] || {
+        road: '#1a1a2e', 
+        grass: '#16213e', 
+        rumble: '#ff00ff', 
+        lane: '#4d4dff', 
+        altRoad: '#1a1a2e', 
+        altGrass: '#0f3460', 
+        altRumble: '#000'
+      };
 
       const addStraight = (length: number) => addRoad(length, length, length, 0, 0, themeColors);
       const addCurve = (enter: number, hold: number, leave: number, curve: number, hill: number) => addRoad(enter, hold, leave, curve, hill, themeColors);
@@ -497,43 +555,209 @@ export const RacingGame: React.FC<RacingGameProps> = ({
       // Starting straight
       addStraight(100);
 
+      // Sector 1: URBAN APEX - SKYLINE OVERDRIVE
+      const generateUrbanApex = () => {
+        // Skyscraper Corridor
+        addStraight(200);
+        
+        // First 90 degree turn
+        addCurve(40, 40, 40, 8, 0);
+        
+        // Long straight between skyscrapers
+        addStraight(300);
+        
+        // Elevated section
+        addHill(100, 100, 100, 40);
+        
+        // 135 degree sharp turn (Drift setup)
+        addCurve(60, 80, 60, -12, 0);
+        
+        // Underpass entry (Hill down)
+        addHill(100, 100, 100, -60);
+        addStraight(200);
+        
+        // Light rail flyover (Hill up)
+        addHill(100, 100, 100, 80);
+        
+        // Final 90 degree turn
+        addCurve(40, 40, 40, 8, 0);
+        
+        addStraight(150);
+      };
+
+      // Sector 2: GULFLINE DRIFT - AZURE SWEEP
+      const generateGulflineDrift = () => {
+        // Starting straight along the coast
+        addStraight(150);
+        
+        // The Great Sweep (Continuous S-curve)
+        addCurve(100, 200, 100, 4, 0);  // Long right
+        addCurve(100, 200, 100, -4, 0); // Long left
+        
+        // Scenic straight
+        addStraight(200);
+        
+        // Gentle elevation change
+        addHill(100, 100, 100, 20);
+        
+        // Drift-friendly S-curves
+        addCurve(60, 60, 60, 6, 0);
+        addCurve(60, 60, 60, -6, 0);
+        
+        // Bridge Straight over water
+        addStraight(300);
+        
+        // Final gentle curve
+        addCurve(100, 100, 100, 3, 0);
+        
+        addStraight(100);
+      };
+
+      // Sector 3: STEEL SECTOR - INDUSTRIAL ZONE
+      const generateSteelSector = () => {
+        // Starting straight through cargo yards
+        addStraight(100);
+        
+        // Technical chicane
+        addCurve(20, 20, 20, 6, 0);
+        addCurve(20, 20, 20, -6, 0);
+        
+        // Straight corridor (Boost pad area)
+        addStraight(150);
+        
+        // Tight hairpin (180 degree turn)
+        addCurve(40, 100, 40, 15, 0);
+        
+        // S-curves through pipelines
+        addSCurves();
+        
+        // Another hairpin
+        addCurve(40, 100, 40, -15, 0);
+        
+        // Final technical section
+        addStraight(80);
+        addCurve(20, 40, 20, 8, 0);
+        
+        addStraight(100);
+      };
+
+      // Sector 4: REDLINE CANYON - ASTEROID BELT CANYON
+      const generateRedlineCanyon = () => {
+        // Starting straight through the canyon
+        addStraight(150);
+        
+        // Long sweeper (Canyon wall drift)
+        addCurve(150, 300, 150, 5, 0);
+        
+        // Narrow pass (Hill down)
+        addHill(100, 100, 100, -80);
+        addStraight(100);
+        
+        // Another long sweeper
+        addCurve(150, 300, 150, -5, 0);
+        
+        // Sharp drop into a valley
+        addHill(50, 50, 50, -120);
+        addStraight(150);
+        
+        // Final climb out of the canyon
+        addHill(100, 100, 100, 100);
+        
+        addStraight(100);
+      };
+
+      // Sector 5: NEON GRID
+      const generateNeonGrid = () => {
+        addStraight(100);
+        addCurve(20, 20, 20, 10, 0);
+        addStraight(50);
+        addCurve(20, 20, 20, -10, 0);
+        addStraight(100);
+        addHill(50, 50, 50, 100); // Quantum Jump ramp
+        addStraight(150);
+        addCurve(100, 200, 100, 12, 0); // Ion Loop
+        addStraight(100);
+      };
+
+      // Sector 6: SUMMIT SWITCHBACK
+      const generateSummitSwitchback = () => {
+        addStraight(100);
+        for (let i = 0; i < 4; i++) {
+          addHill(50, 50, 50, 80);
+          addCurve(20, 40, 20, (i % 2 === 0 ? 1 : -1) * 12, 0); // Switchbacks
+        }
+        addStraight(200);
+        addHill(100, 100, 100, -200); // Long downhill
+        addCurve(100, 100, 100, 4, 0);
+        addStraight(100);
+      };
+
+      // Sector 7: MIDNIGHT APEX
+      const generateMidnightApex = () => {
+        addStraight(200);
+        addCurve(40, 40, 40, 10, 0);
+        addStraight(100);
+        addCurve(40, 40, 40, -10, 0);
+        addStraight(300);
+        addCurve(60, 100, 60, 14, 0); // Drift corner
+        addStraight(200);
+      };
+
+      // Sector 8: PALMLINE CIRCUIT
+      const generatePalmlineCircuit = () => {
+        addStraight(200);
+        addCurve(150, 300, 150, 3, 0); // Wide curve
+        addStraight(300);
+        addCurve(100, 100, 100, -5, 0);
+        addStraight(200);
+        addHill(50, 50, 50, 10); // Wooden bridge bump
+        addStraight(100);
+      };
+
+      // Sector 9: STORM SECTOR
+      const generateStormSector = () => {
+        addStraight(100);
+        for (let i = 0; i < 6; i++) {
+          addCurve(20, 20, 20, (seededRandom() > 0.5 ? 1 : -1) * 10, 0);
+          addStraight(40);
+        }
+        addStraight(100);
+        addSCurves();
+        addStraight(100);
+      };
+
+      // Sector 10: VELOCITY RING
+      const generateVelocityRing = () => {
+        addStraight(200);
+        addCurve(200, 800, 200, 6, 30); // High-speed banking
+        addStraight(400);
+        addCurve(200, 800, 200, 6, 30); // High-speed banking
+        addStraight(200);
+      };
+
       // Theme-specific layout patterns
       if (trackTheme === 'neon_city') {
-        // Neon City: Tight turns, many straights, high density
-        for (let i = 0; i < 15; i++) {
-          addStraight(50 + seededRandom() * 100);
-          addCurve(20, 40, 20, (seededRandom() > 0.5 ? 1 : -1) * (4 + seededRandom() * 4), 0);
-        }
+        generateUrbanApex();
       } else if (trackTheme === 'coastal_highway') {
-        // Coastal: Long sweeping curves, gentle hills
-        for (let i = 0; i < 10; i++) {
-          addHill(100, 100, 100, (seededRandom() - 0.5) * 40);
-          addCurve(150, 200, 150, (seededRandom() - 0.5) * 3, 0);
-        }
+        generateGulflineDrift();
       } else if (trackTheme === 'desert_canyon') {
-        // Desert Canyon: Massive hills, sharp drops
-        for (let i = 0; i < 10; i++) {
-          addHill(100, 100, 100, (seededRandom() - 0.5) * 120);
-          addCurve(80, 80, 80, (seededRandom() - 0.5) * 5, 0);
-        }
+        generateRedlineCanyon();
       } else if (trackTheme === 'cyber_industrial') {
-        // Industrial: Technical S-curves, flat but complex
-        for (let i = 0; i < 12; i++) {
-          addStraight(80);
-          addSCurves();
-        }
+        generateSteelSector();
       } else if (trackTheme === 'mountain_pass') {
-        // Mountain Pass: Extreme elevation, sharp curves
-        for (let i = 0; i < 12; i++) {
-          addHill(50, 50, 50, (seededRandom() - 0.5) * 200);
-          addCurve(40, 40, 40, (seededRandom() > 0.5 ? 1 : -1) * 6, 0);
-        }
+        generateSummitSwitchback();
       } else if (trackTheme === 'urban_downtown') {
-        // Urban Downtown: Grid-like, many straights and 90 degree turns
-        for (let i = 0; i < 15; i++) {
-          addStraight(100);
-          addCurve(20, 20, 20, (seededRandom() > 0.5 ? 1 : -1) * 8, 0);
-        }
+        generateUrbanApex(); // Fallback
+      } else if (trackTheme === 'neon_grid') {
+        generateNeonGrid();
+      } else if (trackTheme === 'midnight_apex') {
+        generateMidnightApex();
+      } else if (trackTheme === 'palmline_circuit') {
+        generatePalmlineCircuit();
+      } else if (trackTheme === 'storm_sector') {
+        generateStormSector();
+      } else if (trackTheme === 'velocity_ring') {
+        generateVelocityRing();
       }
 
       // Ending straight
@@ -554,16 +778,35 @@ export const RacingGame: React.FC<RacingGameProps> = ({
           
           if (trackTheme === 'neon_city') {
             source = seededRandom() > 0.6 ? 'building' : 'lamp';
+            // Add skyscraper corridor feel
+            if (n > 100 && n < 300) source = 'building';
+            if (n > 500 && n < 800) source = 'building';
           } else if (trackTheme === 'coastal_highway') {
             source = seededRandom() > 0.7 ? 'rock' : 'tree'; // Tree will be palm-like
+            // Add bridge feel
+            if (n > 1000 && n < 1300) source = 'none'; // No scenery on bridge
           } else if (trackTheme === 'desert_canyon') {
             source = seededRandom() > 0.7 ? 'rock' : 'cactus';
+            // Add canyon feel
+            if (n % 40 === 0) source = 'rock';
           } else if (trackTheme === 'cyber_industrial') {
             source = seededRandom() > 0.5 ? 'building' : 'lamp'; // Industrial buildings/lamps
+            // Add heavy industrial feel
+            if (n % 50 === 0) source = 'building';
           } else if (trackTheme === 'mountain_pass') {
             source = seededRandom() > 0.6 ? 'rock' : 'pine';
           } else if (trackTheme === 'urban_downtown') {
             source = seededRandom() > 0.4 ? 'building' : 'lamp';
+          } else if (trackTheme === 'neon_grid') {
+            source = 'none';
+          } else if (trackTheme === 'midnight_apex') {
+            source = seededRandom() > 0.5 ? 'building' : 'lamp';
+          } else if (trackTheme === 'palmline_circuit') {
+            source = seededRandom() > 0.7 ? 'tree' : 'rock';
+          } else if (trackTheme === 'storm_sector') {
+            source = 'lamp';
+          } else if (trackTheme === 'velocity_ring') {
+            source = 'lamp';
           }
 
           segments[n].sprites.push({ 
