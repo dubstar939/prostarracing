@@ -101,7 +101,7 @@ export default function Garage({ carConfig, setCarConfig, money, setMoney, inven
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Preview Area */}
         <div className="flex-1 relative bg-[radial-gradient(circle_at_center,rgba(39,39,42,0.5)_0%,transparent_100%)] min-h-[300px] lg:min-h-0">
-          {CAR_MODELS[carConfig.model].glbUrl ? (
+          {CAR_MODELS[carConfig.model]?.glbUrl ? (
             <ThreeCarPreview carConfig={carConfig} glbUrl={CAR_MODELS[carConfig.model].glbUrl!} />
           ) : (
             <canvas 
@@ -114,10 +114,10 @@ export default function Garage({ carConfig, setCarConfig, money, setMoney, inven
           
           <div className="absolute bottom-6 md:bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 w-full px-4">
             <h2 className="text-2xl md:text-4xl font-black italic uppercase tracking-tighter text-white text-center">
-              {CAR_MODELS[carConfig.model].name}
+              {CAR_MODELS[carConfig.model]?.name || 'Unknown Model'}
             </h2>
             <div className="flex flex-wrap justify-center gap-2 md:gap-4">
-              {Object.entries(CAR_MODELS[carConfig.model].stats).map(([stat, val]) => (
+              {CAR_MODELS[carConfig.model] && Object.entries(CAR_MODELS[carConfig.model].stats).map(([stat, val]) => (
                 <div key={stat} className="flex flex-col items-center">
                   <div className="text-[8px] md:text-[10px] uppercase font-bold text-zinc-500 mb-1">{stat}</div>
                   <div className="flex gap-0.5">

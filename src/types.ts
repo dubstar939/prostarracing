@@ -1,4 +1,4 @@
-export type CarModelType = 'speedster' | 'drifter' | 'tank' | 'interceptor';
+export type CarModelType = 'speedster' | 'drifter' | 'tank' | 'interceptor' | 'rx7_fd' | 's15_silvia' | 'nsx_na1' | 'skyline_r34' | 'supra_mk4' | 'ae86' | 'evo_ix' | 'wrx_sti' | 'gtr_r32' | '300zx_z32' | 'gto_3000gt' | 'skyline_r33';
 
 export type BiomeType = 'neon_city' | 'coastal_highway' | 'desert_canyon' | 'cyber_industrial' | 'mountain_pass' | 'urban_downtown';
 
@@ -84,5 +84,65 @@ export const CAR_MODELS: Record<CarModelType, { name: string; description: strin
     name: 'Interceptor', 
     description: 'Balanced performance.', 
     stats: { speed: 7, accel: 7, handling: 7 }
+  },
+  rx7_fd: { 
+    name: 'RX-7 FD', 
+    description: 'The Rotary King. Exceptional drift control.', 
+    stats: { speed: 7, accel: 8, handling: 9 }
+  },
+  s15_silvia: { 
+    name: 'Silvia S15', 
+    description: 'Drift legend. Highly customizable.', 
+    stats: { speed: 6, accel: 9, handling: 8 }
+  },
+  nsx_na1: { 
+    name: 'NSX NA1', 
+    description: 'Mid-engine precision. The Supercar killer.', 
+    stats: { speed: 9, accel: 7, handling: 7 }
+  },
+  skyline_r34: { 
+    name: 'Skyline R34', 
+    description: 'The Godzilla. All-wheel drive dominance.', 
+    stats: { speed: 8, accel: 8, handling: 7 }
+  },
+  supra_mk4: { 
+    name: 'Supra MK4', 
+    description: '2JZ power. A straight-line monster.', 
+    stats: { speed: 9, accel: 6, handling: 5 }
+  },
+  ae86: { 
+    name: 'Sprinter AE86', 
+    description: 'The Ghost of Akina. Lightweight drift perfection.', 
+    stats: { speed: 5, accel: 7, handling: 10 }
+  },
+  evo_ix: { 
+    name: 'Lancer Evo IX', 
+    description: 'Rally-bred agility. Perfect for tight corners.', 
+    stats: { speed: 7, accel: 9, handling: 8 }
+  },
+  wrx_sti: { 
+    name: 'Impreza WRX STI', 
+    description: 'Boxer rumble. Unbeatable grip in all conditions.', 
+    stats: { speed: 7, accel: 8, handling: 9 }
+  },
+  gtr_r32: { 
+    name: 'Skyline R32', 
+    description: 'The Original Godzilla. Pure racing pedigree.', 
+    stats: { speed: 8, accel: 7, handling: 8 }
+  },
+  '300zx_z32': { 
+    name: '300ZX Z32', 
+    description: 'Highway king. Aerodynamic and powerful.', 
+    stats: { speed: 9, accel: 6, handling: 6 }
+  },
+  gto_3000gt: { 
+    name: 'GTO 3000GT', 
+    description: 'AWD powerhouse. Heavy but fast.', 
+    stats: { speed: 8, accel: 7, handling: 6 }
+  },
+  skyline_r33: { 
+    name: 'Skyline R33', 
+    description: 'The middle child. Stable and reliable.', 
+    stats: { speed: 8, accel: 8, handling: 8 }
   },
 };

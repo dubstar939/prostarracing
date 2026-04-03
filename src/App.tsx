@@ -86,31 +86,30 @@ export default function App() {
     }
   });
   const [carConfig, setCarConfig] = useState<CarConfig>(() => {
+    const defaultCar: CarConfig = {
+      model: 'speedster',
+      color: '#ffffff',
+      spoiler: 'small',
+      rims: 'silver',
+      decal: 'none',
+      bodyKit: 'stock',
+      engine: 1,
+      tires: 1,
+      turbo: 1
+    };
+
     try {
       const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('racing_car_config') : null;
-      return saved ? JSON.parse(saved) : {
-        model: 'speedster',
-        color: '#ffffff',
-        spoiler: 'small',
-        rims: 'silver',
-        decal: 'none',
-        bodyKit: 'stock',
-        engine: 1,
-        tires: 1,
-        turbo: 1
-      };
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Validate that the model exists in CAR_MODELS
+        if (parsed.model && CAR_MODELS[parsed.model as CarModelType]) {
+          return parsed;
+        }
+      }
+      return defaultCar;
     } catch (e) {
-      return {
-        model: 'speedster',
-        color: '#ffffff',
-        spoiler: 'small',
-        rims: 'silver',
-        decal: 'none',
-        bodyKit: 'stock',
-        engine: 1,
-        tires: 1,
-        turbo: 1
-      };
+      return defaultCar;
     }
   });
   
@@ -233,7 +232,7 @@ export default function App() {
             {coverImage ? (
               <img 
                 src={coverImage} 
-                alt="Pro Star-Racer Title"
+                alt="Pro Star-Racing Title"
                 className="absolute inset-0 w-full h-full object-cover opacity-60"
                 referrerPolicy="no-referrer"
               />
@@ -252,7 +251,7 @@ export default function App() {
                 className="space-y-2 px-4"
               >
                 <h1 className="text-4xl sm:text-6xl md:text-8xl lg:text-9xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-cyan-400 via-blue-500 to-purple-600 uppercase drop-shadow-[0_0_30px_rgba(6,182,212,0.5)] leading-tight">
-                  Pro Star-Racer
+                  Pro Star-Racing
                 </h1>
                 <div className="h-1 w-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent"></div>
               </motion.div>
@@ -420,31 +419,21 @@ export default function App() {
                 <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
                   <Map className="w-4 h-4" /> Track Theme
                 </h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['neon_city', 'coastal_highway', 'steel_sector', 'redline_canyon', 'neon_grid', 'mountain_pass', 'midnight_apex', 'palmline_circuit', 'storm_sector', 'velocity_ring'] as any[]).map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => setTrackTheme(t === 'steel_sector' ? 'cyber_industrial' : t === 'redline_canyon' ? 'desert_canyon' : t)}
-                        className={`py-3 px-1 rounded-sm border text-[10px] uppercase font-bold transition-all ${
-                          (trackTheme === t || (t === 'steel_sector' && trackTheme === 'cyber_industrial') || (t === 'redline_canyon' && trackTheme === 'desert_canyon'))
-                            ? 'bg-cyan-500 border-cyan-400 text-black' 
-                            : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500'
-                        }`}
-                      >
-                        {t === 'neon_city' ? 'Urban Apex' :
-                         t === 'coastal_highway' ? 'Gulfline Drift' :
-                         t === 'steel_sector' ? 'Steel Sector' :
-                         t === 'redline_canyon' ? 'Redline Canyon' :
-                         t === 'neon_grid' ? 'Neon Grid' :
-                         t === 'mountain_pass' ? 'Summit Switchback' :
-                         t === 'midnight_apex' ? 'Midnight Apex' :
-                         t === 'palmline_circuit' ? 'Palmline Circuit' :
-                         t === 'storm_sector' ? 'Storm Sector' :
-                         t === 'velocity_ring' ? 'Velocity Ring' :
-                         t.replace('_', ' ')}
-                      </button>
-                    ))}
-                  </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['neon_city', 'coastal_highway', 'desert_canyon', 'cyber_industrial', 'mountain_pass', 'urban_downtown'] as TrackThemeType[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTrackTheme(t)}
+                      className={`py-3 px-1 rounded-sm border text-[10px] uppercase font-bold transition-all ${
+                        trackTheme === t 
+                          ? 'bg-cyan-500 border-cyan-400 text-black' 
+                          : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                      }`}
+                    >
+                      {t.replace('_', ' ')}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="bg-zinc-900/50 p-6 rounded-sm border border-zinc-800 text-left space-y-4">
