@@ -86,7 +86,7 @@ export default function App() {
     }
   });
   const [carConfig, setCarConfig] = useState<CarConfig>(() => {
-    const defaultCar: CarConfig = {
+    const defaultConfig: CarConfig = {
       model: 'speedster',
       color: '#ffffff',
       spoiler: 'small',
@@ -100,16 +100,16 @@ export default function App() {
 
     try {
       const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('racing_car_config') : null;
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Validate that the model exists in CAR_MODELS
-        if (parsed.model && CAR_MODELS[parsed.model as CarModelType]) {
-          return parsed;
-        }
+      if (!saved) return defaultConfig;
+      
+      const parsed = JSON.parse(saved);
+      // Validate that the model exists in CAR_MODELS
+      if (parsed && parsed.model && CAR_MODELS[parsed.model as CarModelType]) {
+        return parsed;
       }
-      return defaultCar;
+      return defaultConfig;
     } catch (e) {
-      return defaultCar;
+      return defaultConfig;
     }
   });
   

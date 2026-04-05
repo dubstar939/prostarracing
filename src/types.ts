@@ -64,7 +64,7 @@ export const PERFORMANCE_PARTS = {
   ]
 } as const;
 
-export const CAR_MODELS: Record<CarModelType, { name: string; description: string; stats: any; glbUrl?: string }> = {
+export const CAR_MODELS: Record<CarModelType, { name: string; description: string; stats: any }> = {
   speedster: { 
     name: 'Speedster', 
     description: 'High top speed, lower handling.', 

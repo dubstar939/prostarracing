@@ -1,5 +1,5 @@
 import { CarConfig, CarModelType } from '../types';
-import jdmSprites from '../assets/jdm_sprites.json';
+import jdmSprites from '../game/spritesheet.json';
 
 const JDM_MODELS: CarModelType[] = [
   'rx7_fd', 's15_silvia', 'nsx_na1', 
@@ -8,178 +8,36 @@ const JDM_MODELS: CarModelType[] = [
   '300zx_z32', 'gto_3000gt', 'skyline_r33'
 ];
 
-// Cache for the sprite sheet image (now a generated canvas)
-let spriteSheet: HTMLCanvasElement | null = null;
+// Cache for the sprite sheet image
+let spriteSheetImage: HTMLImageElement | null = null;
 
 // Cache for tinted sprites to avoid per-frame canvas operations
 const tintCache: Map<string, HTMLCanvasElement> = new Map();
 
-const drawProceduralCarFrame = (ctx: CanvasRenderingContext2D, cx: number, cy: number, model: string, frameIndex: number) => {
-  ctx.save();
-  ctx.translate(Math.floor(cx), Math.floor(cy));
+const loadSpriteSheet = (): HTMLImageElement | null => {
+  if (spriteSheetImage) return spriteSheetImage;
   
-  // Disable image smoothing for pixel-perfect look
-  ctx.imageSmoothingEnabled = false;
-
-  // Base colors (grayscale for tinting)
-  const baseColor = '#cccccc';
-  const shadowColor = '#888888';
-  const darkShadowColor = '#555555';
-  const highlightColor = '#eeeeee';
-  const windowColor = '#1a1a1a';
+  const img = new Image();
+  const assetPath = '/assets/cars.png';
+  img.src = assetPath;
   
-  // Model characteristics (Scaled up for 64x64 frame)
-  let bodyW = 58;
-  let bodyH = 34;
-  let cabinW = 32;
-  let cabinX = 0;
-  let wingType: 'none' | 'sport' | 'hoop' | 'ducktail' = 'none';
-  let isHatch = false;
-  let hasScoop = false;
-
-  // Define model-specific shapes (Refined for grounded JDM look)
-  switch(model) {
-    case 'rx7_fd': bodyW = 56; bodyH = 28; cabinW = 28; wingType = 'sport'; break;
-    case 's15_silvia': bodyW = 58; bodyH = 30; cabinW = 30; wingType = 'sport'; break;
-    case 'nsx_na1': bodyW = 60; bodyH = 26; cabinW = 24; cabinX = -6; wingType = 'sport'; break;
-    case 'skyline_r34': bodyW = 62; bodyH = 34; cabinW = 34; wingType = 'sport'; break;
-    case 'supra_mk4': bodyW = 60; bodyH = 34; cabinW = 30; wingType = 'hoop'; break;
-    case 'ae86': bodyW = 52; bodyH = 36; cabinW = 28; isHatch = true; wingType = 'ducktail'; break;
-    case 'evo_ix': bodyW = 60; bodyH = 36; cabinW = 34; wingType = 'sport'; break;
-    case 'wrx_sti': bodyW = 60; bodyH = 36; cabinW = 34; wingType = 'sport'; hasScoop = true; break;
-    case 'gtr_r32': bodyW = 60; bodyH = 32; cabinW = 32; wingType = 'sport'; break;
-    case '300zx_z32': bodyW = 62; bodyH = 26; cabinW = 32; wingType = 'none'; break;
-    case 'gto_3000gt': bodyW = 62; bodyH = 30; cabinW = 34; wingType = 'sport'; break;
-    case 'skyline_r33': bodyW = 62; bodyH = 34; cabinW = 34; wingType = 'sport'; break;
-  }
-
-  // Handle drift tilting (discrete pixel steps)
-  if (frameIndex === 2) ctx.translate(-4, 0), ctx.rotate(-0.08); // drift_l
-  if (frameIndex === 3) ctx.translate(4, 0), ctx.rotate(0.08);  // drift_r
-
-  // 0. Draw Wheels (Grounded Stance)
-  ctx.fillStyle = '#111111';
-  const wheelW = 10;
-  const wheelH = 6;
-  const wheelYOffset = bodyH/4 - 2;
-  ctx.fillRect(-bodyW/2 + 4, wheelYOffset, wheelW, wheelH); // Front Left
-  ctx.fillRect(bodyW/2 - 4 - wheelW, wheelYOffset, wheelW, wheelH); // Front Right
-  ctx.fillRect(-bodyW/2 + 4, -bodyH/4 - wheelH + 2, wheelW, wheelH); // Rear Left
-  ctx.fillRect(bodyW/2 - 4 - wheelW, -bodyH/4 - wheelH + 2, wheelW, wheelH); // Rear Right
-
-  // 1. Draw Body (Main Chassis)
-  ctx.fillStyle = baseColor;
-  // Main Body Block
-  ctx.fillRect(-bodyW/2, -bodyH/4, bodyW, bodyH/2);
+  img.onload = () => {
+    spriteSheetImage = img;
+  };
   
-  // 2. Draw Cabin
-  ctx.fillStyle = baseColor;
-  if (isHatch) {
-    ctx.fillRect(-bodyW/2, -bodyH/2, bodyW * 0.7, bodyH/4);
-  } else {
-    ctx.fillRect(-cabinW/2 + cabinX, -bodyH/2, cabinW, bodyH/4);
-  }
-
-  // 3. Shading (3-Tone Ramp + Depth Highlight)
-  // Side Shadow
-  ctx.fillStyle = shadowColor;
-  ctx.fillRect(-bodyW/2, bodyH/8, bodyW, bodyH/8);
-  // Bottom Edge Shadow
-  ctx.fillStyle = darkShadowColor;
-  ctx.fillRect(-bodyW/2, bodyH/4 - 3, bodyW, 3);
-  // Roof Highlight (Depth)
-  ctx.fillStyle = highlightColor;
-  if (isHatch) {
-    ctx.fillRect(-bodyW/2, -bodyH/2, bodyW * 0.7, 3);
-  } else {
-    ctx.fillRect(-cabinW/2 + cabinX, -bodyH/2, cabinW, 3);
-  }
-  
-  // 4. Windows
-  ctx.fillStyle = windowColor;
-  const winW = cabinW * 0.75;
-  ctx.fillRect(-winW/2 + cabinX, -bodyH/2 + 3, winW, bodyH/5);
-
-  // 5. Model Features
-  ctx.fillStyle = baseColor;
-  // Wing
-  if (wingType === 'sport') {
-    ctx.fillStyle = shadowColor;
-    ctx.fillRect(-bodyW/2 + 2, -bodyH/2 - 4, 5, bodyH/4); // Left pillar
-    ctx.fillRect(bodyW/2 - 7, -bodyH/2 - 4, 5, bodyH/4); // Right pillar
-    ctx.fillStyle = baseColor;
-    ctx.fillRect(-bodyW/2, -bodyH/2 - 6, bodyW, 4); // Top blade
-  } else if (wingType === 'hoop') {
-    ctx.fillStyle = shadowColor;
-    ctx.fillRect(-bodyW/2 + 4, -bodyH/1.8, 4, bodyH/3);
-    ctx.fillRect(bodyW/2 - 8, -bodyH/1.8, 4, bodyH/3);
-    ctx.fillStyle = baseColor;
-    ctx.fillRect(-bodyW/2 + 4, -bodyH/1.8, bodyW - 8, 4);
-  } else if (wingType === 'ducktail') {
-    ctx.fillStyle = shadowColor;
-    ctx.fillRect(bodyW/2 - 8, -bodyH/4 - 3, 8, 5);
-  }
-  
-  // Scoop
-  if (hasScoop) {
-    ctx.fillStyle = darkShadowColor;
-    ctx.fillRect(bodyW/6, -bodyH/4 - 4, 10, 3);
-  }
-
-  // 6. Lights (Clean & Distinct)
-  const lightW = Math.max(6, Math.floor(bodyW * 0.15));
-  if (frameIndex === 0) { // Front
-    ctx.fillStyle = highlightColor;
-    ctx.fillRect(-bodyW/2 + 2, -bodyH/10, lightW, 4);
-    ctx.fillRect(bodyW/2 - (lightW + 2), -bodyH/10, lightW, 4);
-  } else { // Rear/Drift/Boost
-    ctx.fillStyle = '#bb0000'; // Grounded Red
-    ctx.fillRect(-bodyW/2 + 2, -bodyH/10, lightW + 2, 4);
-    ctx.fillRect(bodyW/2 - (lightW + 4), -bodyH/10, lightW + 2, 4);
-  }
-
-  // 7. Boost Effects (Grounded Exhaust Flames)
-  if (frameIndex === 4) {
-    ctx.fillStyle = '#ffaa00'; // Orange flame
-    ctx.fillRect(-bodyW/6, bodyH/4, bodyW/3, 6);
-    ctx.fillStyle = '#ffff00'; // Yellow core
-    ctx.fillRect(-bodyW/10, bodyH/4, bodyW/5, 4);
-  }
-
-  ctx.restore();
-};
-
-const generateJDMSpriteSheet = (): HTMLCanvasElement => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 340;
-  canvas.height = 816;
-  const ctx = canvas.getContext('2d')!;
-
-  // Clear background (alpha 0)
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Draw each model row
-  JDM_MODELS.forEach((model, rowIndex) => {
-    const yBase = rowIndex * 68 + 2;
-    
-    // Draw 5 frames: front, rear, drift_l, drift_r, boost
-    for (let col = 0; col < 5; col++) {
-      const xBase = col * 68 + 2;
-      drawProceduralCarFrame(ctx, xBase + 32, yBase + 32, model, col);
+  img.onerror = () => {
+    console.warn(`[CarRenderer] Failed to load spritesheet from: ${assetPath}. Falling back to placeholder.`);
+    // Fallback to placeholder if local asset is missing
+    if (img.src !== 'https://picsum.photos/seed/car-sprites/340/816') {
+      img.src = 'https://picsum.photos/seed/car-sprites/340/816';
     }
-  });
-
-  return canvas;
-};
-
-const loadSpriteSheet = () => {
-  if (spriteSheet) return spriteSheet;
-  spriteSheet = generateJDMSpriteSheet();
-  return spriteSheet;
+  };
+  
+  return null;
 };
 
 const getTintedSprite = (
-  sheet: HTMLCanvasElement,
+  sheet: HTMLImageElement,
   frame: { x: number, y: number, w: number, h: number },
   color: string,
   model: string,
@@ -747,31 +605,33 @@ export const drawCar = (
 ) => {
   if (JDM_MODELS.includes(config.model)) {
     const sheet = loadSpriteSheet();
-    let frameName = `${config.model}_front`;
-    
-    if (isBoosting) {
-      frameName = `${config.model}_boost`;
-    } else if (Math.abs(driftAngle) > 0.1) {
-      frameName = driftAngle > 0 ? `${config.model}_drift_r` : `${config.model}_drift_l`;
-    } else if (speed > 10) {
-      frameName = `${config.model}_rear`;
-    }
+    if (sheet) {
+      let frameName = `${config.model}_front`;
+      
+      if (isBoosting) {
+        frameName = `${config.model}_boost`;
+      } else if (Math.abs(driftAngle) > 0.1) {
+        frameName = driftAngle > 0 ? `${config.model}_drift_r` : `${config.model}_drift_l`;
+      } else if (speed > 10) {
+        frameName = `${config.model}_rear`;
+      }
 
-    const frame = (jdmSprites.frames as any)[frameName];
-    if (frame) {
-      ctx.save();
-      ctx.translate(x, y - h/2);
-      
-      // Use tinted sprite if possible
-      const tintedSprite = getTintedSprite(sheet, frame, config.color, config.model, frameName);
-      
-      // Draw the sprite
-      ctx.drawImage(
-        tintedSprite,
-        -w/2, -h/2, w, h
-      );
-      ctx.restore();
-      return;
+      const frame = (jdmSprites.frames as any)[frameName];
+      if (frame) {
+        ctx.save();
+        ctx.translate(x, y - h/2);
+        
+        // Use tinted sprite if possible
+        const tintedSprite = getTintedSprite(sheet, frame, config.color, config.model, frameName);
+        
+        // Draw the sprite
+        ctx.drawImage(
+          tintedSprite,
+          -w/2, -h/2, w, h
+        );
+        ctx.restore();
+        return;
+      }
     }
   }
 

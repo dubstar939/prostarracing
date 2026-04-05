@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { CarConfig, CAR_MODELS, BODY_KITS, DECALS, CarModelType, Inventory, PERFORMANCE_PARTS } from '../types';
 import { drawCar } from '../utils/carRenderer';
-import ThreeCarPreview from './ThreeCarPreview';
 
 interface GarageProps {
   carConfig: CarConfig;
@@ -101,23 +100,19 @@ export default function Garage({ carConfig, setCarConfig, money, setMoney, inven
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Preview Area */}
         <div className="flex-1 relative bg-[radial-gradient(circle_at_center,rgba(39,39,42,0.5)_0%,transparent_100%)] min-h-[300px] lg:min-h-0">
-          {CAR_MODELS[carConfig.model]?.glbUrl ? (
-            <ThreeCarPreview carConfig={carConfig} glbUrl={CAR_MODELS[carConfig.model].glbUrl!} />
-          ) : (
-            <canvas 
-              ref={canvasRef} 
-              width={800} 
-              height={600} 
-              className="w-full h-full object-contain"
-            />
-          )}
+          <canvas 
+            ref={canvasRef} 
+            width={800} 
+            height={600} 
+            className="w-full h-full object-contain"
+          />
           
           <div className="absolute bottom-6 md:bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 w-full px-4">
             <h2 className="text-2xl md:text-4xl font-black italic uppercase tracking-tighter text-white text-center">
-              {CAR_MODELS[carConfig.model]?.name || 'Unknown Model'}
+              {CAR_MODELS[carConfig.model].name}
             </h2>
             <div className="flex flex-wrap justify-center gap-2 md:gap-4">
-              {CAR_MODELS[carConfig.model] && Object.entries(CAR_MODELS[carConfig.model].stats).map(([stat, val]) => (
+              {Object.entries(CAR_MODELS[carConfig.model].stats).map(([stat, val]) => (
                 <div key={stat} className="flex flex-col items-center">
                   <div className="text-[8px] md:text-[10px] uppercase font-bold text-zinc-500 mb-1">{stat}</div>
                   <div className="flex gap-0.5">
