@@ -175,8 +175,9 @@ export const RacingGame: React.FC<RacingGameProps> = ({
   const [isReady, setIsReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [weather, setWeather] = useState<'clear' | 'rain' | 'fog'>('clear');
-
-  const [hud, setHud] = useState({
+  
+  // Use refs for high-frequency HUD data to avoid re-renders
+  const hudRef = useRef({
     speed: 0,
     position: 8,
     lap: 1,
@@ -196,6 +197,19 @@ export const RacingGame: React.FC<RacingGameProps> = ({
     bustTimer: 0,
     isBusted: false
   });
+  
+  // Separate low-frequency HUD state to reduce re-renders
+  const [hudLowFreq, setHudLowFreq] = useState({
+    speed: 0,
+    position: 8,
+    lap: 1,
+    totalLaps: 2,
+    time: 0,
+    turbo: 100,
+    damage: 0,
+    driftScore: 0
+  });
+  
   const [isMuted, setIsMuted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<'4:3' | '16:9'>('4:3');
@@ -565,6 +579,7 @@ export const RacingGame: React.FC<RacingGameProps> = ({
     let animationFrameId: number;
     let startTime = Date.now();
     let finished = false;
+    let lastHudUpdate = 0;
 
     let turboMeter = 0;
     let turboActive = false;
@@ -1083,8 +1098,8 @@ export const RacingGame: React.FC<RacingGameProps> = ({
         }
       }
 
-      setHud(prev => ({
-        ...prev,
+      // Update HUD ref (no re-render)
+      hudRef.current = {
         speed: Math.floor(speed / 100),
         time: (Date.now() - startTime) / 1000,
         lap: Math.min(totalLaps, lap),
@@ -1095,16 +1110,29 @@ export const RacingGame: React.FC<RacingGameProps> = ({
         slipstream: isSlipstreaming,
         checkpointTime: checkpointTime,
         progress: position / trackLength,
-        opponents: [
-          ...opponents.map(o => o.z / trackLength)
-        ],
+        opponents: opponents.map(o => o.z / trackLength),
         playerSP,
         rivalSP,
         rivalDistance,
         driftScore,
         bustTimer,
         isBusted
-      }));
+      };
+      
+      // Throttle low-frequency state updates (every 100ms instead of every frame)
+      const now = Date.now();
+      if (now - lastHudUpdate > 100) {
+        setHudLowFreq(prev => ({
+          ...prev,
+          speed: Math.floor(speed / 100),
+          lap: Math.min(totalLaps, lap),
+          position: playerRank,
+          turbo: turboMeter,
+          damage: damage,
+          driftScore
+        }));
+        lastHudUpdate = now;
+      }
     };
 
     const draw = () => {
