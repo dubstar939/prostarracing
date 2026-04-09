@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { loadAllAssets } from './core/assetLoader.js';
+import { loadAllAssets, preloadCarSprites, getCarSprites, clearSpriteCache } from './core/assetLoader';
 
 async function startGame() {
     const assets = await loadAllAssets();

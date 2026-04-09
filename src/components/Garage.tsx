@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { CarConfig, CAR_MODELS, BODY_KITS, DECALS, CarModelType, Inventory, PERFORMANCE_PARTS } from '../types';
 import { drawCar } from '../utils/carRenderer';
+import { preloadCarSprites, getCarSprites } from '../core/assetLoader';
 import ThreeCarPreview from './ThreeCarPreview';
 
 interface GarageProps {
@@ -48,6 +49,10 @@ export default function Garage({ carConfig, setCarConfig, money, setMoney, inven
     if (!ctx) return;
 
     let frame = 0;
+    
+    // Preload sprites when car config changes
+    preloadCarSprites(carConfig).catch(console.warn);
+
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
