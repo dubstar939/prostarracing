@@ -1,0 +1,302 @@
+[
+  {
+    "codename": "AKAGI-Z",
+    "body_type": "coupe",
+    "era": "early 90s",
+    "silhouette_anchor": "pop-up headlights, low sloping roofline",
+    "aero_style": "OEM+ front lip, side skirts only",
+    "wheel_style": "deep-dish mesh",
+    "color_direction": "Crimson Red",
+    "build_intent": "touge"
+  },
+  {
+    "codename": "MIDNIGHT-BOX",
+    "body_type": "sedan",
+    "era": "late 90s",
+    "silhouette_anchor": "angular C-pillar, flat trunk deck",
+    "aero_style": "vented hood, ducktail spoiler",
+    "wheel_style": "6-spoke deep-dish",
+    "color_direction": "Black Mica",
+    "build_intent": "street"
+  },
+  {
+    "codename": "SILVER-ARROW",
+    "body_type": "coupe",
+    "era": "early 2000s",
+    "silhouette_anchor": "long hood, integrated rear wing",
+    "aero_style": "canards, aggressive diffuser",
+    "wheel_style": "5-spoke split-rim",
+    "color_direction": "Silverstone Grey",
+    "build_intent": "time-attack"
+  },
+  {
+    "codename": "KEI-BULLET",
+    "body_type": "kei",
+    "era": "late 90s",
+    "silhouette_anchor": "tall hatchback, vertical rear window",
+    "aero_style": "wide body kit, roof vent",
+    "wheel_style": "white multi-spoke",
+    "color_direction": "Championship White",
+    "build_intent": "drift"
+  },
+  {
+    "codename": "ROTARY-HATCH",
+    "body_type": "hatch",
+    "era": "early 90s",
+    "silhouette_anchor": "curved glasshouse, retractable lights",
+    "aero_style": "flared arches, rear valance",
+    "wheel_style": "gold 5-spoke",
+    "color_direction": "Sunburst Yellow",
+    "build_intent": "drift"
+  },
+  {
+    "codename": "SKYLINE-GT",
+    "body_type": "coupe",
+    "era": "late 90s",
+    "silhouette_anchor": "quad round taillights, wide rear haunches",
+    "aero_style": "B-style vents, high-mounted wing",
+    "wheel_style": "gunmetal mesh",
+    "color_direction": "Steel Blue",
+    "build_intent": "grip"
+  },
+  {
+    "codename": "LEGACY-WGN",
+    "body_type": "wagon",
+    "era": "early 2000s",
+    "silhouette_anchor": "long roof rail, boxy rear cargo",
+    "aero_style": "subtle lip kit, lowered stance",
+    "wheel_style": "silver 7-spoke",
+    "color_direction": "Forest Green",
+    "build_intent": "street"
+  },
+  {
+    "codename": "FAIRLAD-Z",
+    "body_type": "coupe",
+    "era": "early 90s",
+    "silhouette_anchor": "bubble fenders, t-top roof panels",
+    "aero_style": "over-fenders, rear diffuser",
+    "wheel_style": "bronze deep-dish",
+    "color_direction": "Topaz Mist",
+    "build_intent": "touge"
+  },
+  {
+    "codename": "INTEGRA-R",
+    "body_type": "hatch",
+    "era": "late 90s",
+    "silhouette_anchor": "sharp wedge nose, flat rear Kamm tail",
+    "aero_style": "chassis height adjust, front splitter",
+    "wheel_style": "white Enkei-style",
+    "color_direction": "Phoenix Orange",
+    "build_intent": "time-attack"
+  },
+  {
+    "codename": "CHASER-X",
+    "body_type": "sedan",
+    "era": "late 90s",
+    "silhouette_anchor": "hidden rear door handles, long wheelbase",
+    "aero_style": "trunk spoiler, side canards",
+    "wheel_style": "chrome deep-dish",
+    "color_direction": "Super Red",
+    "build_intent": "drift"
+  },
+  {
+    "codename": "CELICA-GT",
+    "body_type": "hatch",
+    "era": "early 2000s",
+    "silhouette_anchor": "angular facelift nose, double-wing rear",
+    "aero_style": "rally-inspired bumper, vented hood",
+    "wheel_style": "black multi-spoke",
+    "color_direction": "Rally Blue",
+    "build_intent": "grip"
+  },
+  {
+    "codename": "STARLET-T",
+    "body_type": "hatch",
+    "era": "early 90s",
+    "silhouette_anchor": "compact short-deck, rounded edges",
+    "aero_style": "minimalist lip, stock wings",
+    "wheel_style": "silver 5-spoke",
+    "color_direction": "Peach Pink",
+    "build_intent": "street"
+  },
+  {
+    "codename": "GTO-TWIN",
+    "body_type": "coupe",
+    "era": "early 90s",
+    "silhouette_anchor": "muscular wide body, pop-up quad lights",
+    "aero_style": "active aero mimic, heavy side skirts",
+    "wheel_style": "magnesium racing",
+    "color_direction": "Dark Purple",
+    "build_intent": "time-attack"
+  },
+  {
+    "codename": "ALTEZZA-S",
+    "body_type": "sedan",
+    "era": "early 2000s",
+    "silhouette_anchor": "clear tail lamps, sharp beltline",
+    "aero_style": "TRD-style full kit",
+    "wheel_style": "hyper-silver mesh",
+    "color_direction": "Lightning Silver",
+    "build_intent": "drift"
+  },
+  {
+    "codename": "CAPPUCCINO-K",
+    "body_type": "kei",
+    "era": "early 90s",
+    "silhouette_anchor": "mid-engine bubble canopy, gullwing doors",
+    "aero_style": "stock curves, minimal add-ons",
+    "wheel_style": "color-matched 3-spoke",
+    "color_direction": "Two-tone Grey",
+    "build_intent": "touge"
+  },
+  {
+    "codename": "LAUREL-M",
+    "body_type": "sedan",
+    "era": "early 2000s",
+    "silhouette_anchor": "hardtop frameless windows, curved rear",
+    "aero_style": "drift-spec over-fenders",
+    "wheel_style": "gold deep-dish",
+    "color_direction": "Pearl White",
+    "build_intent": "drift"
+  },
+  {
+    "codename": "SWIFT-S",
+    "body_type": "hatch",
+    "era": "early 2000s",
+    "silhouette_anchor": "short overhangs, upright stance",
+    "aero_style": "front splitter, rear valence",
+    "wheel_style": "white rally block",
+    "color_direction": "Speed Yellow",
+    "build_intent": "grip"
+  },
+  {
+    "codename": "MARK-II",
+    "body_type": "sedan",
+    "era": "late 90s",
+    "silhouette_anchor": "formal roof line, rectangular grille",
+    "aero_style": "custom wide-body, vented fenders",
+    "wheel_style": "polished lip mesh",
+    "color_direction": "Graphite Black",
+    "build_intent": "street"
+  },
+  {
+    "codename": "PRELUDE-V",
+    "body_type": "coupe",
+    "era": "late 90s",
+    "silhouette_anchor": "low slung wedge, no B-pillar",
+    "aero_style": "side air intakes, rear wing delete",
+    "wheel_style": "titanium 5-spoke",
+    "color_direction": "Milano Red",
+    "build_intent": "time-attack"
+  },
+  {
+    "codename": "VITARA-X",
+    "body_type": "compact",
+    "era": "early 90s",
+    "silhouette_anchor": "boxy SUV shape, removable roof",
+    "aero_style": "lift kit, off-road tires",
+    "wheel_style": "black steelies",
+    "color_direction": "Teal Green",
+    "build_intent": "street"
+  },
+  {
+    "codename": "RX-7-FD",
+    "body_type": "coupe",
+    "era": "early 90s",
+    "silhouette_anchor": "organic curves, hidden wipers",
+    "aero_style": "RE Amemiya style wide kit",
+    "wheel_style": "bronze mesh",
+    "color_direction": "Brilliant Black",
+    "build_intent": "drift"
+  },
+  {
+    "codename": "EVO-IX",
+    "body_type": "sedan",
+    "era": "early 2000s",
+    "silhouette_anchor": "large rear wing, hood scoop",
+    "aero_style": "rally bred aero, front splitter",
+    "wheel_style": "white 6-spoke",
+    "color_direction": "WRC Blue",
+    "build_intent": "grip"
+  },
+  {
+    "codename": "STORM-W",
+    "body_type": "wagon",
+    "era": "early 90s",
+    "silhouette_anchor": "wood panel trim, round headlights",
+    "aero_style": "lowered suspension, OEM wheels",
+    "wheel_style": "classic turbine",
+    "color_direction": "Beige Metallic",
+    "build_intent": "street"
+  },
+  {
+    "codename": "BEAT-M",
+    "body_type": "kei",
+    "era": "early 90s",
+    "silhouette_anchor": "midship open top, triple throttle",
+    "aero_style": "color coded body kits",
+    "wheel_style": "small diameter 10-spoke",
+    "color_direction": "Spice Orange",
+    "build_intent": "touge"
+  },
+  {
+    "codename": "SOARER-L",
+    "body_type": "coupe",
+    "era": "early 90s",
+    "silhouette_anchor": "pillarless hardtop, digital dash hint",
+    "aero_style": "luxury sport lip, subtle spoiler",
+    "wheel_style": "chrome intricate mesh",
+    "color_direction": "Super White",
+    "build_intent": "street"
+  },
+  {
+    "codename": "NSX-OR",
+    "body_type": "coupe",
+    "era": "early 90s",
+    "silhouette_anchor": "low mid-engine profile, side intake",
+    "aero_style": "track day wing, canards",
+    "wheel_style": "forged magnesium",
+    "color_direction": "New Formula Red",
+    "build_intent": "time-attack"
+  },
+  {
+    "codename": "R32-GTR",
+    "body_type": "coupe",
+    "era": "late 90s",
+    "silhouette_anchor": "boxy Godzilla stance, square lights",
+    "aero_style": "Nismo Z-tune inspired vents",
+    "wheel_style": "gunmetal 6-spoke",
+    "color_direction": "Gun Grey",
+    "build_intent": "grip"
+  },
+  {
+    "codename": "CIVIC-EK",
+    "body_type": "hatch",
+    "era": "late 90s",
+    "silhouette_anchor": "round headlights, tall boy stance",
+    "aero_style": "Type-R replica bumper",
+    "wheel_style": "gold Volk-style",
+    "color_direction": "Grand Prix White",
+    "build_intent": "drift"
+  },
+  {
+    "codename": "SUPRA-MK4",
+    "body_type": "coupe",
+    "era": "early 90s",
+    "silhouette_anchor": "double bubble roof, curvy hips",
+    "aero_style": "bombex wide body, GT wing",
+    "wheel_style": "silver deep-dish",
+    "color_direction": "Renaissance Blue",
+    "build_intent": "time-attack"
+  },
+  {
+    "codename": "LANCER-CE",
+    "body_type": "sedan",
+    "era": "early 2000s",
+    "silhouette_anchor": "shark nose front, sloping rear",
+    "aero_style": "rally mud flaps, big wing",
+    "wheel_style": "white rally gold",
+    "color_direction": "Frost White",
+    "build_intent": "grip"
+  }
+]
