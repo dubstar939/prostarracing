@@ -1,0 +1,33 @@
+{
+  "asset_type": "2D Character Sprite",
+  "resolution": "32x32",
+  "style": "Retro-futuristic neon arcade",
+  "palette": [
+    "#00f6ff",
+    "#ff00e6",
+    "#020617",
+    "transparent"
+  ],
+  "frames": [
+    {
+      "frame_name": "idle",
+      "bounding_box": { "x": 8, "y": 4, "width": 16, "height": 24 },
+      "pixel_grid": "Note: Pixel grid omitted for brevity. Please use a sprite editor to generate the full 32x32 array of hex codes for the 4-frame walk cycle (idle, contact, recoil, passing) using the specified palette."
+    },
+    {
+      "frame_name": "contact",
+      "bounding_box": { "x": 8, "y": 4, "width": 16, "height": 24 },
+      "pixel_grid": "Note: Pixel grid omitted for brevity."
+    },
+    {
+      "frame_name": "recoil",
+      "bounding_box": { "x": 8, "y": 5, "width": 16, "height": 23 },
+      "pixel_grid": "Note: Pixel grid omitted for brevity."
+    },
+    {
+      "frame_name": "passing",
+      "bounding_box": { "x": 8, "y": 3, "width": 16, "height": 25 },
+      "pixel_grid": "Note: Pixel grid omitted for brevity."
+    }
+  ]
+}
