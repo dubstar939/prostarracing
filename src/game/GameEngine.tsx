@@ -7,12 +7,26 @@ import { Track } from './Track';
 export default function GameEngine({ onExit }: { onExit: () => void }) {
   return (
     <div className="w-full h-screen bg-black relative overflow-hidden">
-      <Canvas shadows camera={{ position: [0, 5, 10], fov: 60 }}>
+      <Canvas 
+        shadows 
+        camera={{ position: [0, 5, 10], fov: 60 }}
+        gl={{ 
+          antialias: true,
+          powerPreference: 'high-performance',
+          alpha: false,
+        }}
+        dpr={[1, 2]}
+      >
         <color attach="background" args={['#050505']} />
         <fog attach="fog" args={['#050505', 10, 150]} />
         
         {/* Physics Engine Initialization */}
-        <Physics broadphase="SAP" gravity={[0, -9.81, 0]}>
+        <Physics 
+          broadphase="SAP" 
+          gravity={[0, -9.81, 0]}
+          iterations={10}
+          allowSleep={true}
+        >
           <Track />
           <Car onFinish={onExit} />
         </Physics>

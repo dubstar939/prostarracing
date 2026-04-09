@@ -1,13 +1,16 @@
 import { usePlane, useBox } from '@react-three/cannon';
+import { useMemo } from 'react';
 
 export function Track() {
   // 5. Environment Setup: Ground plane
   const [groundRef] = usePlane(() => ({
     rotation: [-Math.PI / 2, 0, 0],
     position: [0, 0, 0],
-    material: { friction: 0.1 }
+    material: { friction: 0.1 },
+    collisionFilterGroup: 1,
+    collisionFilterMask: 1,
   }));
-
+  
   // 8. Collision Detection: Static physics bodies for walls
   // Left barrier
   const [leftWallRef] = useBox(() => ({
@@ -29,6 +32,27 @@ export function Track() {
     position: [0, 1, -50],
     args: [2, 2, 2],
   }));
+
+  // Memoize street lights to prevent re-creation
+  const streetLights = useMemo(() => (
+    <>
+      {Array.from({ length: 20 }).map((_, i) => (
+        <group key={i} position={[14, 0, -i * 50]}>
+          <mesh position={[0, 5, 0]} receiveShadow castShadow>
+            <cylinderGeometry args={[0.2, 0.2, 10]} />
+            <meshStandardMaterial color="#444" />
+          </mesh>
+          <pointLight 
+            position={[-2, 9, 0]} 
+            color="#facc15" 
+            intensity={50} 
+            distance={40}
+            castShadow={false}
+          />
+        </group>
+      ))}
+    </>
+  ), []);
 
   return (
     <group>
@@ -57,19 +81,17 @@ export function Track() {
       </mesh>
 
       {/* Scenery / Street Lights */}
-      {Array.from({ length: 20 }).map((_, i) => (
-        <group key={i} position={[14, 0, -i * 50]}>
-          <mesh position={[0, 5, 0]}>
-            <cylinderGeometry args={[0.2, 0.2, 10]} />
-            <meshStandardMaterial color="#444" />
-          </mesh>
-          <pointLight position={[-2, 9, 0]} color="#facc15" intensity={50} distance={40} />
-        </group>
-      ))}
+      {streetLights}
 
       {/* Ambient environment lighting */}
       <ambientLight intensity={0.1} />
-      <directionalLight position={[10, 20, 10]} intensity={0.2} castShadow />
+      <directionalLight 
+        position={[10, 20, 10]} 
+        intensity={0.2} 
+        castShadow={false}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+      />
       
       {/* Distant city neon glow */}
       <pointLight position={[0, 50, -500]} color="#a855f7" intensity={5000} distance={1000} />
