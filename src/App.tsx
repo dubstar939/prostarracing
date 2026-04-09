@@ -3,6 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { loadAllAssets } from './core/assetLoader.js';
+
+async function startGame() {
+    const assets = await loadAllAssets();
+
+    window.gameAssets = assets; // optional global
+
+    console.log("Loaded cars:", Object.keys(assets.cars));
+    console.log("Loaded characters:", assets.characters);
+
+    // Start your engine here
+}
+
+startGame();
+
 import React, { useState, useEffect, useRef } from 'react';
 import { RacingGame, TrackThemeType } from './components/RacingGame';
 import { Trophy, Flag, Settings, Play, Info, Loader2, Map, ShoppingBag, ChevronRight, Gauge, Zap } from 'lucide-react';
