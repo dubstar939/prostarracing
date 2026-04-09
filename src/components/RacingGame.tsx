@@ -4,6 +4,7 @@ import { audioManager } from '../services/audioService';
 import { Volume2, VolumeX, Pause, Play as PlayIcon, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Zap, Monitor } from 'lucide-react';
 
 import { drawCar, shadeColor } from '../utils/carRenderer';
+import { preloadCarSprites } from '../core/assetLoader';
 
 import { CarConfig, RaceMode, PERFORMANCE_PARTS, CarModelType } from '../types';
 
@@ -225,7 +226,10 @@ export const RacingGame: React.FC<RacingGameProps> = ({
 
   useEffect(() => {
     if (!isReady) {
-      // Showroom view
+      // Showroom view - preload sprites for smooth rendering
+      preloadCarSprites(carConfig).catch(console.warn);
+      
+      // Show a simple floor
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
