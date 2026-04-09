@@ -3,33 +3,42 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { loadAllAssets, preloadCarSprites, getCarSprites, clearSpriteCache } from './core/assetLoader';
-
-async function startGame() {
-    const assets = await loadAllAssets();
-
-    window.gameAssets = assets; // optional global
-
-    console.log("Loaded cars:", Object.keys(assets.cars));
-    console.log("Loaded characters:", assets.characters);
-
-    // Start your engine here
-}
-
-startGame();
-
-import React, { useState, useEffect, useRef } from 'react';
-import { RacingGame, TrackThemeType } from './components/RacingGame';
-import { Trophy, Flag, Settings, Play, Info, Loader2, Map, ShoppingBag, ChevronRight, Gauge, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from '@google/genai';
-import { CarConfig, CAR_MODELS, CarModelType, RaceMode, Inventory } from './types';
+import { Trophy, Flag, Settings, Play, Info, Loader2, Map, ShoppingBag, Gauge, Zap } from 'lucide-react';
 
+import { CarConfig, CAR_MODELS, CarModelType, RaceMode, Inventory } from './types';
+import { RacingGame, TrackThemeType } from './components/RacingGame';
+import Garage from './components/Garage';
+import Store from './components/Store';
+import { loadAllAssets } from './core/assetLoader';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+type GameState = 'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'options' | 'mode-select' | 'garage' | 'store';
+
+interface RaceResult {
+  position: number;
+  time: string;
+  reward: number;
+  score?: number;
+}
+
+// ============================================================================
+// Hooks
+// ============================================================================
+
+/**
+ * Hook to manage cover image generation and caching
+ */
 function useCoverImage() {
   const [coverImage, setCoverImage] = useState<string | null>(() => {
     try {
       return typeof localStorage !== 'undefined' ? localStorage.getItem('coverImage') : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   });
@@ -44,25 +53,23 @@ function useCoverImage() {
           console.warn("GEMINI_API_KEY is missing, skipping cover image generation");
           return;
         }
+        
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash-image',
           contents: '1980s arcade racing video game cover art, synthwave aesthetic, outrun style, neon grid floor, glowing sunset, retro sports car driving towards the horizon, vibrant magenta cyan and purple colors, airbrushed retro style, no text',
           config: {
-            imageConfig: {
-              aspectRatio: "9:16"
-            }
+            imageConfig: { aspectRatio: "9:16" }
           }
         });
 
         for (const part of response.candidates?.[0]?.content?.parts || []) {
           if (part.inlineData) {
-            const base64EncodeString = part.inlineData.data;
-            const imageUrl = `data:image/png;base64,${base64EncodeString}`;
+            const imageUrl = `data:image/png;base64,${part.inlineData.data}`;
             setCoverImage(imageUrl);
             try {
               localStorage.setItem('coverImage', imageUrl);
-            } catch (e) {
+            } catch {
               console.warn("Could not save to localStorage (quota exceeded?)");
             }
             break;
@@ -79,112 +86,103 @@ function useCoverImage() {
   return coverImage;
 }
 
-import Garage from './components/Garage';
-import Store from './components/Store';
+// ============================================================================
+// Storage Helpers
+// ============================================================================
+
+const STORAGE_KEYS = {
+  LEVEL: 'racing_level',
+  MONEY: 'racing_money',
+  CAR_CONFIG: 'racing_car_config',
+  INVENTORY: 'racing_inventory',
+  COVER_IMAGE: 'coverImage'
+} as const;
+
+const safeGetFromStorage = <T,>(key: string, defaultValue: T): T => {
+  try {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+    return saved ? JSON.parse(saved) : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+};
+
+const safeSetToStorage = (key: string, value: any) => {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+  } catch {
+    console.warn(`Failed to save ${key} to localStorage`);
+  }
+};
+
+const DEFAULT_CAR_CONFIG: CarConfig = {
+  model: 'speedster',
+  color: '#ffffff',
+  spoiler: 'small',
+  rims: 'silver',
+  decal: 'none',
+  bodyKit: 'stock',
+  engine: 1,
+  tires: 1,
+  turbo: 1
+};
+
+const DEFAULT_INVENTORY: Inventory = {
+  engines: [1],
+  tires: [1],
+  turbos: [1]
+};
+
+// ============================================================================
+// Main Component
+// ============================================================================
 
 export default function App() {
-  const [gameState, setGameState] = useState<'title' | 'menu' | 'playing' | 'gameover' | 'level-complete' | 'options' | 'mode-select' | 'garage' | 'store'>('title');
-  const [level, setLevel] = useState(() => {
-    try {
-      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('racing_level') : null;
-      return saved ? parseInt(saved, 10) : 1;
-    } catch (e) {
-      return 1;
-    }
-  });
-  const [money, setMoney] = useState(() => {
-    try {
-      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('racing_money') : null;
-      return saved ? parseInt(saved, 10) : 0;
-    } catch (e) {
-      return 0;
-    }
-  });
-  const [carConfig, setCarConfig] = useState<CarConfig>(() => {
-    try {
-      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('racing_car_config') : null;
-      return saved ? JSON.parse(saved) : {
-        model: 'speedster',
-        color: '#ffffff',
-        spoiler: 'small',
-        rims: 'silver',
-        decal: 'none',
-        bodyKit: 'stock',
-        engine: 1,
-        tires: 1,
-        turbo: 1
-      };
-    } catch (e) {
-      return {
-        model: 'speedster',
-        color: '#ffffff',
-        spoiler: 'small',
-        rims: 'silver',
-        decal: 'none',
-        bodyKit: 'stock',
-        engine: 1,
-        tires: 1,
-        turbo: 1
-      };
-    }
-  });
+  // Game State
+  const [gameState, setGameState] = useState<GameState>('title');
+  const [level, setLevel] = useState(() => safeGetFromStorage(STORAGE_KEYS.LEVEL, 1));
+  const [money, setMoney] = useState(() => safeGetFromStorage(STORAGE_KEYS.MONEY, 0));
+  const [carConfig, setCarConfig] = useState<CarConfig>(() => 
+    safeGetFromStorage(STORAGE_KEYS.CAR_CONFIG, DEFAULT_CAR_CONFIG)
+  );
+  const [inventory, setInventory] = useState<Inventory>(() => 
+    safeGetFromStorage(STORAGE_KEYS.INVENTORY, DEFAULT_INVENTORY)
+  );
   
-  const [inventory, setInventory] = useState<Inventory>(() => {
-    try {
-      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('racing_inventory') : null;
-      return saved ? JSON.parse(saved) : {
-        engines: [1],
-        tires: [1],
-        turbos: [1]
-      };
-    } catch (e) {
-      return {
-        engines: [1],
-        tires: [1],
-        turbos: [1]
-      };
-    }
-  });
-  const [lastResult, setLastResult] = useState<{ position: number; time: string; reward: number; score?: number } | null>(null);
+  // UI State
+  const [lastResult, setLastResult] = useState<RaceResult | null>(null);
   const [raceMode, setRaceMode] = useState<RaceMode>('classic');
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-
-  useEffect(() => {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('racing_level', level.toString());
-    }
-  }, [level]);
-
-  useEffect(() => {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('racing_money', money.toString());
-    }
-  }, [money]);
-
-  useEffect(() => {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('racing_car_config', JSON.stringify(carConfig));
-    }
-  }, [carConfig]);
-
-  useEffect(() => {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('racing_inventory', JSON.stringify(inventory));
-    }
-  }, [inventory]);
   const [trackTheme, setTrackTheme] = useState<TrackThemeType>('neon_city');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  
   const coverImage = useCoverImage();
 
-  const startGame = () => {
-    setGameState('playing');
-  };
+  // Persist state changes
+  useEffect(() => { safeSetToStorage(STORAGE_KEYS.LEVEL, level); }, [level]);
+  useEffect(() => { safeSetToStorage(STORAGE_KEYS.MONEY, money); }, [money]);
+  useEffect(() => { safeSetToStorage(STORAGE_KEYS.CAR_CONFIG, carConfig); }, [carConfig]);
+  useEffect(() => { safeSetToStorage(STORAGE_KEYS.INVENTORY, inventory); }, [inventory]);
+
+  // Initialize assets on mount
+  useEffect(() => {
+    loadAllAssets().then((assets) => {
+      window.gameAssets = assets;
+      console.log("Loaded cars:", Object.keys(assets.cars));
+      console.log("Loaded characters:", assets.characters);
+    }).catch(console.error);
+  }, []);
+
+  // ============================================================================
+  // Event Handlers
+  // ============================================================================
 
   const handleRaceEnd = (position: number, time: number, score?: number) => {
-    const timeStr = position === 99 ? 'BUSTED' : (time / 1000).toFixed(2) + 's';
+    const timeStr = position === 99 ? 'BUSTED' : `${(time / 1000).toFixed(2)}s`;
     let reward = Math.max(0, (10 - position) * 200 + (position === 1 ? 500 : 0));
     
     if (position === 99) {
-      reward = 0;
       setLastResult({ position: 99, time: 'BUSTED', reward: 0, score });
       setGameState('gameover');
       return;
@@ -193,21 +191,30 @@ export default function App() {
     if (raceMode === 'drift' && score) {
       reward += Math.floor(score / 10);
     } else if (raceMode === 'tokyo-expressway') {
-      if (position === 1) {
-        reward = 2000 + (level * 500); // Big reward for winning head-to-head
-      } else {
-        reward = 100 + (level * 50); // Consolation prize
-      }
+      reward = position === 1 ? 2000 + (level * 500) : 100 + (level * 50);
     }
 
     setMoney(prev => prev + reward);
     setLastResult({ position, time: timeStr, reward, score });
+    setGameState(position === 1 ? 'level-complete' : 'gameover');
+  };
+
+  const handleResetProgress = () => {
+    Object.values(STORAGE_KEYS).forEach(key => {
+      try {
+        localStorage?.removeItem(key);
+      } catch {}
+    });
     
-    if (position === 1) {
-      setGameState('level-complete');
-    } else {
-      setGameState('gameover');
-    }
+    setLevel(1);
+    setMoney(0);
+    setInventory(DEFAULT_INVENTORY);
+    setCarConfig(DEFAULT_CAR_CONFIG);
+    window.location.reload();
+  };
+
+  const startGame = () => {
+    setGameState('playing');
   };
 
   const nextLevel = () => {
@@ -215,22 +222,13 @@ export default function App() {
     setGameState('playing');
   };
 
-  const resetProgress = () => {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('racing_level');
-      localStorage.removeItem('racing_car_config');
-      localStorage.removeItem('racing_money');
-      localStorage.removeItem('racing_inventory');
-    }
-    setLevel(1);
-    setMoney(0);
-    setInventory({ engines: [1], tires: [1], turbos: [1] });
-    window.location.reload();
-  };
-
   const retryLevel = () => {
     setGameState('playing');
   };
+
+  // ============================================================================
+  // Render
+  // ============================================================================
 
   return (
     <div className="min-h-screen bg-[#0a0a0c] text-white font-sans overflow-x-hidden overflow-y-auto flex flex-col items-center justify-center py-8">

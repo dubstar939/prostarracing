@@ -17,7 +17,6 @@ env/
 venv/
 .venv/
 .ENV
-.ENV.*
 .python-version
 
 # Logs
@@ -28,18 +27,17 @@ venv/
 .env.local
 .env.*
 
-# IDE files
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*.tmp
 
-# OS generated files
+# OS
 .DS_Store
 Thumbs.db
 
-# Coverage reports
+# Coverage
 coverage/
 htmlcov/
 .coverage
@@ -68,4 +66,3 @@ htmlcov/
 *.tar.xz
 *.tar.zst
 ```
-(src/core/assetLoader.ts)
